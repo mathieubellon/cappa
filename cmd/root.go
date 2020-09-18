@@ -32,9 +32,13 @@ type Config struct {
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "cappa",
-	Short: "It is like Git, but for development databases",
-	Long:  `Heavily inspired by fastmonkeys/stellar`,
+	Use:   `cappa`,
+	Short: `It is like Git, but for development databases`,
+	Long: `
+Cappa allows you to make fast snapshot of your working database and revert back to one of them.
+Useful when you have git branches containing migrations
+- Heavily inspired by fastmonkeys/stellar
+`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
