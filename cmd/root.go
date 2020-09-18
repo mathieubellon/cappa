@@ -6,6 +6,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/jackc/pgx/v4"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -34,6 +35,20 @@ var rootCmd = &cobra.Command{
 	Use:   "cappa",
 	Short: "It is like Git, but for development databases",
 	Long:  `Heavily inspired by fastmonkeys/stellar`,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		verbose, err := cmd.Flags().GetBool("verbose")
+		if err != nil {
+			return err
+		}
+
+		if !verbose {
+			log.SetOutput(ioutil.Discard)
+		}
+		log.Println("Using config file:", viper.ConfigFileUsed())
+		log.Printf("Config values : %#v", config)
+
+		return nil
+	},
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },
@@ -50,7 +65,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	fmt.Print(configFileName)
+
 	if !fileExists(configFileName) {
 		create := false
 		prompt := &survey.Confirm{
@@ -72,7 +87,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	//rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is $PROJECTDIR/.cappa.old.toml)")
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "What's wrong ? Speak to me")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -107,8 +122,6 @@ func initConfig() {
 	if err != nil {
 		log.Fatalf("error unmarshall %s", err)
 	}
-	log.Printf("Connection struct %#v", config)
-
 }
 
 // create connection with postgres db

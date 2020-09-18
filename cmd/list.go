@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v4"
 	"github.com/spf13/cobra"
+	"github.com/ttacon/chalk"
 	"github.com/xeonx/timeago"
 	"log"
 	"sort"
@@ -51,6 +52,11 @@ to quickly create a Cobra application.`,
 		list, err := listSnapshots(trackerConn)
 		if err != nil {
 			log.Fatalf("Could not list snapshots : %s", err)
+		}
+
+		if len(list) == 0 {
+			fmt.Println(chalk.Bold.TextStyle("List is empty, run 'cappa snapshot'"))
+			return
 		}
 
 		sort.Slice(list, func(i, j int) bool {
