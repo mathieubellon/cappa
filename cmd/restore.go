@@ -117,24 +117,21 @@ func PickFileIn(dir string) string {
 }
 
 // TerminateDatabaseConnections force cuts all connections to database before drop or create operations
-func TerminateDatabaseConnections(conn *pgx.Conn, database string) {
+func TerminateDatabaseConnections(conn *pgx.Conn, database string) error {
 
 	//server_version = raw_conn.execute('SHOW server_version;').first()[0]
 	//version_string, _, _ = server_version.partition(' ')
 	//version = [int(x) for x in version_string.split('.')]
 	//return 'pid' if version >= [9, 2] else 'procpid'
 
-	log.Printf("Terminate connexions for %s", database)
-
-	sqlTerminate := fmt.Sprintf(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %[1]s;`, database)
-
+	sqlTerminate := fmt.Sprintf(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%[1]s';`, database)
 	log.Println(sqlTerminate)
 
 	_, err := conn.Exec(context.Background(), sqlTerminate)
 	if err != nil {
-		log.Printf("Failed to terminate database connections: %v\n", err)
+		return err
 	}
-
+	return nil
 }
 
 func restoreDatabase(dumpPath string, config Config, database string) {

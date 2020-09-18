@@ -1,4 +1,6 @@
 .envrc
 cappa.*
-.cappa
+.cappa.*
+.grab.*
+/.cappa
 /.idea

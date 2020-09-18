@@ -18,18 +18,15 @@ var config Config
 
 const cliName string = "cappa"
 
+var configFileName = fmt.Sprintf(".%s.toml", strings.ToLower(cliName))
+
 type Config struct {
-	Username           string `mapstructure:"username"`
-	Password           string `mapstructure:"password"`
-	Host               string `mapstructure:"host"`
-	Port               string `mapstructure:"port"`
-	Database           string `mapstructure:"database"`
-	BackupDir          string `mapstructure:"backup_dir"`
-	AwsAccessKeyId     string `mapstructure:"aws_access_key_id"`
-	AwsSecretAccessKey string `mapstructure:"aws_secret_access_key"`
-	Bucket             string `mapstructure:"bucket"`
-	Region             string `mapstructure:"region"`
-	Prefix             string `mapstructure:"prefix"`
+	Username  string `mapstructure:"username"`
+	Password  string `mapstructure:"password"`
+	Host      string `mapstructure:"host"`
+	Port      string `mapstructure:"port"`
+	Database  string `mapstructure:"database"`
+	BackupDir string `mapstructure:"backup_dir"`
 }
 
 // rootCmd represents the base command when called without any subcommands
@@ -53,9 +50,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-
-	configFileName := fmt.Sprintf("%s.toml", strings.ToLower(cliName))
-
+	fmt.Print(configFileName)
 	if !fileExists(configFileName) {
 		create := false
 		prompt := &survey.Confirm{
@@ -93,14 +88,16 @@ func init() {
 func initConfig() {
 	// Lookup order (first one found is used)
 	// FLAG > ENV > CONFIG
-	viper.SetConfigName("cappa") // name of config file (without extension)
-	viper.AddConfigPath(".")     // optionally look for config in the working directory
+	viper.SetConfigName(".cappa") // name of config file (without extension)
+	viper.AddConfigPath(".")      // optionally look for config in the working directory
 	viper.SetDefault("backup_dir", fmt.Sprintf(".%s", cliName))
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			log.Println("Config file not found")
+			os.Exit(0)
 		} else {
-			log.Println("Config file was found but another error was produced")
+			log.Printf("Config file was found but another error was produced : %s", err)
+			os.Exit(0)
 		}
 	}
 	viper.SetEnvPrefix(strings.ToUpper(cliName))

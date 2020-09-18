@@ -20,42 +20,47 @@ var snapshotCmd = &cobra.Command{
 	Short: "Snapshot database",
 	Run: func(cmd *cobra.Command, args []string) {
 		var snapshotName string
+		snapUuid := shortuuid.New()
+		toDatabase := fmt.Sprintf("%s_%s", cliName, strings.ToLower(snapUuid))
 
+		// Ask user for snapshot name
 		prompt := &survey.Input{
 			Message: "Name of snapshot",
 		}
-
 		err := survey.AskOne(prompt, &snapshotName, survey.WithValidator(survey.Required))
 		if err == terminal.InterruptErr {
 			fmt.Println("User terminated prompt")
 			os.Exit(0)
 		} else if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 
-		if snapshotName != "" {
-			rawConn := createConnection(config, "")
-			defer rawConn.Close(context.Background())
+		// Create raw db connexion for copy operation
+		rawConn := createConnection(config, "")
+		defer rawConn.Close(context.Background())
 
-			log.Printf("Will create snapshot from %s to %s", config.Database, snapshotName)
-
-			snapuuid := shortuuid.New()
-
-			trackerConn := createConnection(config, cliName)
-			defer trackerConn.Close(context.Background())
-			insertSql := fmt.Sprintf("INSERT INTO snapshots (hash, name) VALUES ('%s', '%s');", strings.ToLower(snapuuid), snapshotName)
-			log.Print(insertSql)
-
-			inserted, err := trackerConn.Exec(context.Background(), insertSql)
-			if err != nil {
-				log.Fatalf("Error inserting snapshot infos : %s", err)
-			}
-			log.Printf("%v", inserted)
-
-			TerminateDatabaseConnections(rawConn, config.Database)
-			toDatabase := fmt.Sprintf("%s_%s", cliName, strings.ToLower(snapuuid))
-			copy_database(rawConn, config.Database, toDatabase)
+		// terminate connexion of source DB before copy
+		err = TerminateDatabaseConnections(rawConn, config.Database)
+		if err != nil {
+			log.Fatalf("Impossible to terminate DB connexion : %s", err)
 		}
+
+		// Copy source DB to snapshot DB
+		copy_database(rawConn, config.Database, toDatabase)
+
+		// After (and only after) snapshot DB is created we create tracked db informations
+		trackerConn := createConnection(config, cliName)
+		defer trackerConn.Close(context.Background())
+		insertSql := fmt.Sprintf("INSERT INTO snapshots (hash, name) VALUES ('%s', '%s');", strings.ToLower(snapUuid), snapshotName)
+		log.Print(insertSql)
+
+		_, err = trackerConn.Exec(context.Background(), insertSql)
+		if err != nil {
+			log.Fatalf("Error inserting snapshot infos : %s", err)
+		}
+
+		fmt.Printf("Snapshot created from %s to %s\n", config.Database, snapshotName)
+
 	},
 }
 
@@ -74,7 +79,7 @@ func init() {
 
 func copy_database(conn *pgx.Conn, from_database string, to_database string) {
 	query := fmt.Sprintf(`CREATE DATABASE "%s" WITH TEMPLATE "%s";`, to_database, from_database)
-	log.Printf("execute this query %s", query)
+	log.Print(query)
 
 	_, err := conn.Exec(context.Background(), query)
 	if err != nil {
