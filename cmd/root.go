@@ -34,8 +34,10 @@ type Config struct {
 var rootCmd = &cobra.Command{
 	Use:   `cappa`,
 	Short: `It is like Git, but for development databases`,
-	Long: `
-Cappa allows you to make fast snapshot of your working database and revert back to one of them.
+	Long: `It is like Git, but for development databases
+Cappa allows you to take fast snapshots of your development database.
+You can revert back to one of them.
+
 Useful when you have git branches containing migrations
 - Heavily inspired by fastmonkeys/stellar
 `,

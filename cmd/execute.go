@@ -36,7 +36,7 @@ a dump file from production
 Write sql statements in a file (default '.cappa.sql') separate by newline and run this command.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Command `execute` called")
-		sqlFileName := "..cappa.sql"
+		sqlFileName := ".cappa.sql"
 
 		// open sql file
 		dat, err := ioutil.ReadFile(sqlFileName)

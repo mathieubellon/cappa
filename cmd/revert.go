@@ -19,7 +19,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/AlecAivazis/survey/v2/terminal"
 	"log"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -51,11 +53,16 @@ to quickly create a Cobra application.`,
 
 		var snapshotSelected string
 		prompt := &survey.Select{
-			Message: "Select snapshot to remove :",
+			Message: "Select snapshot to revert to primary database :",
 			Options: options,
 		}
-		survey.AskOne(prompt, &snapshotSelected, survey.WithPageSize(50))
-		fmt.Printf("Selected is : %v", snapshotSelected)
+		err = survey.AskOne(prompt, &snapshotSelected, survey.WithValidator(survey.Required))
+		if err == terminal.InterruptErr {
+			fmt.Println("User terminated prompt")
+			os.Exit(0)
+		} else if err != nil {
+			log.Fatal(err)
+		}
 
 		for _, snap := range list {
 			if snap.Name == snapshotSelected {

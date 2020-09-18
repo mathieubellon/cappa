@@ -12,7 +12,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of Cappa",
 	Long:  `All software has versions. This is Cappa's`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Cappa v0.6 - Alpha")
+		fmt.Println("Cappa v0.6 - Beta")
 	},
 }
 
