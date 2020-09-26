@@ -51,7 +51,7 @@ var snapshotCmd = &cobra.Command{
 		// After (and only after) snapshot DB is created we create tracked db informations
 		trackerConn := createConnection(config, cliName)
 		defer trackerConn.Close(context.Background())
-		insertSql := fmt.Sprintf("INSERT INTO snapshots (hash, name) VALUES ('%s', '%s');", strings.ToLower(snapUuid), snapshotName)
+		insertSql := fmt.Sprintf("INSERT INTO snapshots (hash, name, project) VALUES ('%s', '%s', '%s');", strings.ToLower(snapUuid), snapshotName, config.Project)
 		log.Print(insertSql)
 
 		_, err = trackerConn.Exec(context.Background(), insertSql)

@@ -34,7 +34,7 @@ var initCmd = &cobra.Command{
 		log.Println("init called")
 		conn := createConnection(config, "")
 		defer conn.Close(context.Background())
-		initTrackerDb(conn)
+		createTrackerDb(conn)
 	},
 }
 
@@ -62,8 +62,8 @@ func init() {
 }
 
 // This function create the database for tracking snapshots
-func initTrackerDb(conn *pgx.Conn) {
-	structureSql := `CREATE TABLE snapshots (id SERIAL PRIMARY KEY, hash TEXT UNIQUE NOT NULL, name TEXT NOT NULL, created_at timestamp not null default CURRENT_TIMESTAMP);`
+func createTrackerDb(conn *pgx.Conn) {
+	structureSql := `CREATE TABLE snapshots (id SERIAL PRIMARY KEY, hash TEXT UNIQUE NOT NULL, name TEXT NOT NULL,project TEXT NOT NULL, created_at timestamp not null default CURRENT_TIMESTAMP);`
 	if !DatabaseExists(conn, cliName) {
 		CreateDatabase(conn, cliName)
 
@@ -73,8 +73,9 @@ func initTrackerDb(conn *pgx.Conn) {
 		log.Print(structureSql)
 		_, err := trackerConn.Exec(context.Background(), structureSql)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to create table in cli database: %v\n", err)
+			log.Fatalf("Failed to created cli database: %v\n", err)
 		}
+		fmt.Printf("Database %s successfully created", cliName)
 	}
 }
 

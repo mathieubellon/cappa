@@ -19,10 +19,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v4"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/ttacon/chalk"
 	"github.com/xeonx/timeago"
 	"log"
+	"os"
 	"sort"
 	"time"
 )
@@ -39,17 +42,18 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all your snapshots",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("list called")
+		log.Println("List command called")
+
 		trackerConn := createConnection(config, cliName)
 		defer trackerConn.Close(context.Background())
 
 		list, err := listSnapshots(trackerConn)
 		if err != nil {
-			log.Fatalf("Could not list snapshots : %s", err)
+			log.Printf("Could not list snapshots : %s", err)
 		}
 
 		if len(list) == 0 {
-			fmt.Println(chalk.Bold.TextStyle("No snapshots, run 'cappa snapshot'"))
+			fmt.Println(chalk.Yellow.Color("No snapshots, run 'cappa snapshot'"))
 			return
 		}
 
@@ -57,9 +61,18 @@ var listCmd = &cobra.Command{
 			return list[j].CreatedAt.Before(list[i].CreatedAt)
 		})
 
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"Name", "Created"})
+		table.SetBorder(false)
+
 		for _, snap := range list {
-			fmt.Printf("%v - %s\n", snap.Name, timeago.English.Format(snap.CreatedAt))
+			value := []string{
+				snap.Name,
+				timeago.English.Format(snap.CreatedAt),
+			}
+			table.Append(value)
 		}
+		table.Render() // Send output
 	},
 }
 
@@ -77,8 +90,23 @@ func init() {
 	// listCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
+func getProjectName() string {
+	project := viper.GetString("project")
+	if project == "" {
+		log.Fatal("Error trying to get project name from config (did you set project value?)")
+	}
+	return project
+}
+
 func listSnapshots(conn *pgx.Conn) ([]Snapshot, error) {
-	rows, _ := conn.Query(context.Background(), "select id, hash, name, created_at from snapshots")
+
+	selectQuery := fmt.Sprintf("SELECT id, hash, name, created_at FROM snapshots WHERE project = '%s';", getProjectName())
+
+	rows, err := conn.Query(context.Background(), selectQuery)
+	log.Println(selectQuery)
+	if err != nil {
+		log.Printf("Select Query Error : %s", err)
+	}
 
 	var list []Snapshot
 
@@ -93,5 +121,6 @@ func listSnapshots(conn *pgx.Conn) ([]Snapshot, error) {
 		}
 		list = append(list, Snapshot{Id: id, Hash: hash, Name: name, CreatedAt: createdAt})
 	}
+
 	return list, rows.Err()
 }

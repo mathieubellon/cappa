@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/AlecAivazis/survey/v2/terminal"
+	"github.com/BurntSushi/toml"
 	"github.com/jackc/pgx/v4"
+	"github.com/ttacon/chalk"
 	"io/ioutil"
 	"log"
 	"os"
@@ -22,24 +24,22 @@ const cliName string = "cappa"
 var configFileName = fmt.Sprintf(".%s.toml", strings.ToLower(cliName))
 
 type Config struct {
-	Username  string `mapstructure:"username"`
-	Password  string `mapstructure:"password"`
-	Host      string `mapstructure:"host"`
-	Port      string `mapstructure:"port"`
-	Database  string `mapstructure:"database"`
-	BackupDir string `mapstructure:"backup_dir"`
+	Username  string `mapstructure:"username" survey:"username"`
+	Password  string `mapstructure:"password" survey:"password"`
+	Host      string `mapstructure:"host" survey:"host"`
+	Port      string `mapstructure:"port" survey:"port"`
+	Database  string `mapstructure:"database" survey:"database"`
+	BackupDir string `mapstructure:"backup_dir" survey:"backup_dir"`
+	Project   string `mapstructure:"project" survey:"project"`
 }
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   `cappa`,
 	Short: `It is like Git, but for development databases`,
-	Long: `It is like Git, but for development databases
-Cappa allows you to take fast snapshots of your development database.
-You can revert back to one of them.
-
+	Long: `Cappa allows you to take fast snapshots / restore of your development database.
 Useful when you have git branches containing migrations
-- Heavily inspired by fastmonkeys/stellar
+- Heavily (98%) inspired by fastmonkeys/stellar
 `,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		verbose, err := cmd.Flags().GetBool("verbose")
@@ -52,12 +52,28 @@ Useful when you have git branches containing migrations
 		}
 		log.Println("Using config file:", viper.ConfigFileUsed())
 		log.Printf("Config values : %#v", config)
+		// Enable line numbers in logging
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+		//log.SetFlags(0)
+
+		//wizard()
+		if _, err := os.Stat(configFileName); os.IsNotExist(err) {
+			fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) does not exists", configFileName)))
+			fmt.Println(chalk.Yellow.Color(fmt.Sprint("I will create one after asking you a few questions")))
+			writeConfigFile(configFileName)
+		}
+		// If cli database does not exists, create
+		conn := createConnection(config, "")
+		defer conn.Close(context.Background())
+		createTrackerDb(conn)
 
 		return nil
 	},
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
+	//Run: func(cmd *cobra.Command, args []string) {
+	//	fmt.Print("root called")
+	//},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -71,37 +87,11 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-
-	if !fileExists(configFileName) {
-		create := false
-		prompt := &survey.Confirm{
-			Message: "Config file is missing, create one in local directory  ?",
-			Default: true,
-		}
-		err := survey.AskOne(prompt, &create)
-		if err == terminal.InterruptErr {
-			os.Exit(0)
-		}
-		if create {
-			writeConfigFile(configFileName)
-			fmt.Println("Config file created, you will have to re-run this command")
-			os.Exit(0)
-		}
-	}
-	// Log as JSON instead of the default ASCII formatter.
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "What's wrong ? Speak to me")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
-	// if _, err := os.Stat("cappa.old.toml"); os.IsNotExist(err) {
-	// 	fmt.Println("cappa.old.toml config does not exists, run cappa init")
-	// }
 
 }
 
@@ -132,51 +122,100 @@ func initConfig() {
 
 // create connection with postgres db
 func createConnection(config Config, database string) *pgx.Conn {
-
 	//Connect to a specific database for dedicated operations or, by default, to postgres database for create/drop operations
 	if database == "" {
 		database = "postgres"
 	}
-
 	// Open the connection
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", config.Host, config.Port, config.Username, config.Password, database)
 	conn, err := pgx.Connect(context.Background(), dsn)
 	if err != nil {
 		log.Fatalf("Unable to connect to database %s : %v\n", database, err)
 	}
-
 	// check the connection
 	err = conn.Ping(context.Background())
 	if err != nil {
 		panic(err)
 	}
 	log.Printf("Successfully connected to %s", database)
-
 	return conn
 }
 
 func writeConfigFile(filename string) {
 
-	rawConfig := `username = ""
-password = ""
-host = "localhost"
-port = "5432"
-database = ""
-#backup_dir = ".cappa"
-#aws_access_key_id = ""
-#aws_secret_access_key = ""
-#bucket = ""
-#region = ""
-#prefix = ""`
+	err := runWizard(&config)
+	if err != nil {
+		log.Fatalf("Error during wizard : %s", err)
+	}
 
 	f, err := os.Create(filename)
 	if err != nil {
 		// failed to create/open the file
 		log.Fatal(err)
 	}
-	if _, err := f.WriteString(rawConfig); err != nil {
+	if err := toml.NewEncoder(f).Encode(config); err != nil {
 		// failed to encode
 		log.Fatal(err)
 	}
-	defer f.Close()
+
+	fmt.Println(chalk.Green.Color(fmt.Sprintf("Config file (%s) created, good to go", configFileName)))
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			// failed to close the file
+			log.Fatal(err)
+		}
+	}()
+}
+
+func runWizard(config *Config) error {
+	// Get parent dir name as project name
+	currWorkDirPath, _ := os.Getwd()
+	breakPath := strings.Split(currWorkDirPath, "/")
+	maybeDirName := breakPath[len(breakPath)-1]
+
+	// Wizard questions
+	var qs = []*survey.Question{
+		{
+			Name:     "username",
+			Prompt:   &survey.Input{Message: "Postgres user ?"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "password",
+			Prompt:   &survey.Password{Message: "Postgres password ?"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "host",
+			Prompt:   &survey.Input{Message: "Postgres server host ?", Default: "127.0.0.1"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "port",
+			Prompt:   &survey.Input{Message: "Postgres server port ?", Default: "5432"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "database",
+			Prompt:   &survey.Input{Message: "Your working database name"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "project",
+			Prompt:   &survey.Input{Message: "This project name", Default: maybeDirName},
+			Validate: survey.Required,
+		},
+	}
+
+	// perform the questions
+	err := survey.Ask(qs, config)
+	if err == terminal.InterruptErr {
+		fmt.Println("User terminated prompt, no config file created\n")
+		os.Exit(0)
+	} else if err != nil {
+		return err
+	}
+
+	return nil
 }
