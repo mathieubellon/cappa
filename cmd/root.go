@@ -219,3 +219,31 @@ func runWizard(config *Config) error {
 
 	return nil
 }
+
+// This function create the database for tracking snapshots
+func createTrackerDb(conn *pgx.Conn) {
+	structureSql := `CREATE TABLE snapshots (id SERIAL PRIMARY KEY, hash TEXT UNIQUE NOT NULL, name TEXT NOT NULL,project TEXT NOT NULL, created_at timestamp not null default CURRENT_TIMESTAMP);`
+	if !DatabaseExists(conn, cliName) {
+		CreateDatabase(conn, cliName)
+
+		trackerConn := createConnection(config, cliName)
+		defer trackerConn.Close(context.Background())
+
+		log.Print(structureSql)
+		_, err := trackerConn.Exec(context.Background(), structureSql)
+		if err != nil {
+			log.Fatalf("Failed to created cli database: %v\n", err)
+		}
+		fmt.Printf("Database %s successfully created", cliName)
+	}
+}
+
+// fileExists checks if a file exists and is not a directory before we
+// try using it to prevent further errors.
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
