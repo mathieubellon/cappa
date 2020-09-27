@@ -38,7 +38,7 @@ var rootCmd = &cobra.Command{
 	Short: `It is like Git, but for development databases`,
 	Long: `Cappa allows you to take fast snapshots / restore of your development database.
 Useful when you have git branches containing migrations
-- Heavily (98%) inspired by fastmonkeys/stellar
+Heavily (98%) inspired by fastmonkeys/stellar
 `,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		verbose, err := cmd.Flags().GetBool("verbose")
@@ -57,7 +57,12 @@ Useful when you have git branches containing migrations
 
 		// If cli database does not exists, create
 		conn := createConnection(config, "")
-		defer conn.Close(context.Background())
+		defer func() {
+			err := conn.Close(context.Background())
+			if err != nil {
+				log.Printf("Error while closing db connection : %s", err)
+			}
+		}()
 		createTrackerDb(conn)
 
 		return nil
@@ -221,7 +226,12 @@ func createTrackerDb(conn *pgx.Conn) {
 		CreateDatabase(conn, cliName)
 
 		trackerConn := createConnection(config, cliName)
-		defer trackerConn.Close(context.Background())
+		defer func() {
+			err := trackerConn.Close(context.Background())
+			if err != nil {
+				log.Printf("Error while closing db connection : %s", err)
+			}
+		}()
 
 		log.Print(structureSql)
 		_, err := trackerConn.Exec(context.Background(), structureSql)
@@ -230,14 +240,4 @@ func createTrackerDb(conn *pgx.Conn) {
 		}
 		fmt.Printf("Database %s successfully created", cliName)
 	}
-}
-
-// fileExists checks if a file exists and is not a directory before we
-// try using it to prevent further errors.
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return !info.IsDir()
 }
