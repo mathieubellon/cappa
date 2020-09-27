@@ -23,6 +23,13 @@ const cliName string = "cappa"
 
 var configFileName = fmt.Sprintf(".%s.toml", strings.ToLower(cliName))
 
+var (
+	version = "v0.6-beta1"
+	commit  = "none"
+	date    = "unknown"
+	builtBy = "unknown"
+)
+
 type Config struct {
 	Username string `mapstructure:"username" survey:"username"`
 	Password string `mapstructure:"password" survey:"password"`
