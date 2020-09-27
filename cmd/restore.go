@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/jackc/pgx/v4"
 	"io/ioutil"
 	"log"
@@ -29,38 +30,50 @@ import (
 
 	"strings"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-
 	_ "github.com/lib/pq"
+	"github.com/spf13/cobra"
 )
+
+var directory string
 
 // restoreCmd represents the restore command
 var restoreCmd = &cobra.Command{
 	Use:     "restore",
 	Aliases: []string{"r"},
-	Short:   "Restore a backup into dev DB",
+	Short:   "Restore from snapshot",
 	Long:    ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		conn := createConnection(config, "")
-		defer conn.Close(context.Background())
-
-		if DatabaseExists(conn, config.Database) {
-			TerminateDatabaseConnections(conn, config.Database)
-			DropDatabase(conn, config.Database)
-		}
-
-		CreateDatabase(conn, config.Database)
-
-		backupSelected := PickFileIn(config.BackupDir)
-
-		dumpPath := filepath.Join(config.BackupDir, backupSelected)
-
-		log.Printf("Selected backup to restore : %v", dumpPath)
-
-		restoreDatabase(dumpPath, config, config.Database)
-
+		restoreFromSnapshot()
 	},
+}
+
+var restoreDumpCmd = &cobra.Command{
+	Use:   "dump",
+	Short: "Restore from dump file",
+	Long:  ``,
+	Run: func(cmd *cobra.Command, args []string) {
+		restoreFromDir(directory)
+	},
+}
+
+func restoreFromDir(dir string) {
+	conn := createConnection(config, "")
+	defer conn.Close(context.Background())
+
+	if DatabaseExists(conn, config.Database) {
+		TerminateDatabaseConnections(conn, config.Database)
+		DropDatabase(conn, config.Database)
+	}
+
+	CreateDatabase(conn, config.Database)
+
+	backupSelected := PickFileIn(dir)
+
+	dumpPath := filepath.Join(dir, backupSelected)
+
+	log.Printf("Selected backup to restore : %v", dumpPath)
+
+	restoreDatabase(dumpPath, config, config.Database)
 }
 
 func DatabaseExists(conn *pgx.Conn, database string) bool {
@@ -185,19 +198,54 @@ func CreateDatabase(conn *pgx.Conn, database string) {
 	}
 }
 
+func restoreFromSnapshot() {
+	log.Println("revert called")
+	trackerConn := createConnection(config, cliName)
+	defer trackerConn.Close(context.Background())
+
+	list, err := listSnapshots(trackerConn)
+	if err != nil {
+		log.Fatalf("Error while listing snasphot for removal", err)
+	}
+
+	var options []string
+	for _, snap := range list {
+		options = append(options, snap.Name)
+	}
+
+	var snapshotSelected string
+	prompt := &survey.Select{
+		Message: "Select snapshot to revert to primary database :",
+		Options: options,
+	}
+	err = survey.AskOne(prompt, &snapshotSelected, survey.WithValidator(survey.Required))
+	if err == terminal.InterruptErr {
+		fmt.Println("User terminated prompt")
+		os.Exit(0)
+	} else if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, snap := range list {
+		if snap.Name == snapshotSelected {
+			rawConn := createConnection(config, cliName)
+			defer rawConn.Close(context.Background())
+
+			fromDatabase := fmt.Sprintf("%s_%s", cliName, snap.Hash)
+			toDatabase := config.Database
+
+			TerminateDatabaseConnections(rawConn, fromDatabase)
+			TerminateDatabaseConnections(rawConn, toDatabase)
+
+			DropDatabase(rawConn, config.Database)
+
+			copy_database(rawConn, fromDatabase, toDatabase)
+		}
+	}
+}
+
 func init() {
 	rootCmd.AddCommand(restoreCmd)
-
-	restoreCmd.PersistentFlags().String("host", "", "database server host")
-	restoreCmd.PersistentFlags().String("port", "", "database server port")
-	restoreCmd.PersistentFlags().String("username", "", "database user name")
-	restoreCmd.PersistentFlags().String("password", "", "database user password")
-	restoreCmd.PersistentFlags().String("database", "", "database name")
-	restoreCmd.PersistentFlags().String("backup_dir", "", "Local directory where to look for local backup files")
-	viper.BindPFlag("host", restoreCmd.PersistentFlags().Lookup("host"))
-	viper.BindPFlag("port", restoreCmd.PersistentFlags().Lookup("port"))
-	viper.BindPFlag("username", restoreCmd.PersistentFlags().Lookup("username"))
-	viper.BindPFlag("password", restoreCmd.PersistentFlags().Lookup("password"))
-	viper.BindPFlag("database", restoreCmd.PersistentFlags().Lookup("database"))
-	viper.BindPFlag("backup_dir", restoreCmd.PersistentFlags().Lookup("backup_dir"))
+	restoreCmd.AddCommand(restoreDumpCmd)
+	restoreCmd.PersistentFlags().StringVar(&directory, "from-dir", ".cappa", "Select dump file to restore in directory")
 }

@@ -24,13 +24,12 @@ const cliName string = "cappa"
 var configFileName = fmt.Sprintf(".%s.toml", strings.ToLower(cliName))
 
 type Config struct {
-	Username  string `mapstructure:"username" survey:"username"`
-	Password  string `mapstructure:"password" survey:"password"`
-	Host      string `mapstructure:"host" survey:"host"`
-	Port      string `mapstructure:"port" survey:"port"`
-	Database  string `mapstructure:"database" survey:"database"`
-	BackupDir string `mapstructure:"backup_dir" survey:"backup_dir"`
-	Project   string `mapstructure:"project" survey:"project"`
+	Username string `mapstructure:"username" survey:"username"`
+	Password string `mapstructure:"password" survey:"password"`
+	Host     string `mapstructure:"host" survey:"host"`
+	Port     string `mapstructure:"port" survey:"port"`
+	Database string `mapstructure:"database" survey:"database"`
+	Project  string `mapstructure:"project" survey:"project"`
 }
 
 // rootCmd represents the base command when called without any subcommands
@@ -56,12 +55,6 @@ Useful when you have git branches containing migrations
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 		//log.SetFlags(0)
 
-		//wizard()
-		if _, err := os.Stat(configFileName); os.IsNotExist(err) {
-			fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) does not exists", configFileName)))
-			fmt.Println(chalk.Yellow.Color(fmt.Sprint("I will create one after asking you a few questions")))
-			writeConfigFile(configFileName)
-		}
 		// If cli database does not exists, create
 		conn := createConnection(config, "")
 		defer conn.Close(context.Background())
@@ -101,11 +94,12 @@ func initConfig() {
 	// FLAG > ENV > CONFIG
 	viper.SetConfigName(".cappa") // name of config file (without extension)
 	viper.AddConfigPath(".")      // optionally look for config in the working directory
-	viper.SetDefault("backup_dir", fmt.Sprintf(".%s", cliName))
+	viper.SetDefault("from-dir", fmt.Sprintf(".%s", cliName))
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Println("Config file not found")
-			os.Exit(0)
+			fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) not found in current directory", configFileName)))
+			fmt.Println(chalk.Yellow.Color(fmt.Sprint("I will create one after asking you a few questions")))
+			writeConfigFile(configFileName)
 		} else {
 			log.Printf("Config file was found but another error was produced : %s", err)
 			os.Exit(0)
