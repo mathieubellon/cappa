@@ -8,3 +8,9 @@ darwin:
 
 windows:
 	GOOS=windows GOARCH=amd64 go build -o ./releases/windows_amd64/${APPNAME}.exe ${LDFLAGS} *.go
+
+release:
+	goreleaser --rm-dist
+
+releasefake:
+	goreleaser release --skip-publish
