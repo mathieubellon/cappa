@@ -206,7 +206,7 @@ func restoreFromSnapshot() {
 
 	list, err := listSnapshots(trackerConn)
 	if err != nil {
-		log.Fatalf("Error while listing snasphot for removal", err)
+		log.Fatalf("Error while listing snasphot for removal : %s", err)
 	}
 
 	var options []string

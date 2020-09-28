@@ -208,7 +208,7 @@ func runWizard(config *Config) error {
 	// perform the questions
 	err := survey.Ask(qs, config)
 	if err == terminal.InterruptErr {
-		fmt.Println("User terminated prompt, no config file created\n")
+		fmt.Println("User terminated prompt, no config file created")
 		os.Exit(0)
 	} else if err != nil {
 		return err
