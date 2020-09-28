@@ -48,11 +48,11 @@ Useful when you have git branches containing migrations
 Heavily (98%) inspired by fastmonkeys/stellar
 `,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
 			return err
 		}
-
 		if !verbose {
 			log.SetOutput(ioutil.Discard)
 		}
@@ -61,6 +61,27 @@ Heavily (98%) inspired by fastmonkeys/stellar
 		// Enable line numbers in logging
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
 		//log.SetFlags(0)
+
+		fmt.Printf("%v", cmd.Name())
+		runningCmd := cmd.Name()
+		if runningCmd == "version" || runningCmd == "help" {
+			return nil
+		}
+
+		if err := viper.ReadInConfig(); err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+				fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) not found in current directory", configFileName)))
+				fmt.Println(chalk.Yellow.Color(fmt.Sprint("I will create one after asking you a few questions")))
+				writeConfigFile(configFileName)
+			} else {
+				log.Printf("Config file was found but another error was produced : %s", err)
+				os.Exit(0)
+			}
+		}
+		err = viper.Unmarshal(&config)
+		if err != nil {
+			log.Fatalf("error unmarshall %s", err)
+		}
 
 		// If cli database does not exists, create
 		conn := createConnection(config, "")
@@ -107,23 +128,7 @@ func initConfig() {
 	viper.SetConfigName(".cappa") // name of config file (without extension)
 	viper.AddConfigPath(".")      // optionally look for config in the working directory
 	viper.SetDefault("from-dir", fmt.Sprintf(".%s", cliName))
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) not found in current directory", configFileName)))
-			fmt.Println(chalk.Yellow.Color(fmt.Sprint("I will create one after asking you a few questions")))
-			writeConfigFile(configFileName)
-		} else {
-			log.Printf("Config file was found but another error was produced : %s", err)
-			os.Exit(0)
-		}
-	}
-	viper.SetEnvPrefix(strings.ToUpper(cliName))
-	viper.AutomaticEnv()
 
-	err := viper.Unmarshal(&config)
-	if err != nil {
-		log.Fatalf("error unmarshall %s", err)
-	}
 }
 
 // create connection with postgres db
@@ -168,7 +173,6 @@ func writeConfigFile(filename string) {
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			// failed to close the file
 			log.Fatal(err)
 		}
 	}()

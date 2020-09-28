@@ -7,6 +7,7 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/aws/aws-sdk-go v1.33.10
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/go-playground/validator/v10 v10.3.0
 	github.com/jackc/pgx/v4 v4.8.1
 	github.com/lib/pq v1.3.0
 	github.com/lithammer/shortuuid/v3 v3.0.4
