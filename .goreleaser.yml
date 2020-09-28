@@ -51,7 +51,7 @@ brews:
       owner: hbyio
       name: cappa-tap
       # Optionally a token can be provided, if it differs from the token provided to GoReleaser
-      token: "{{ .GITHUB_TOKEN }}"
+      # token: "{{ .Env.GITHUB_TOKEN }}"
 
     # Template for the url which is determined by the given Token (github or gitlab)
     # Default for github is "https://github.com/<repo_owner>/<repo_name>/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
@@ -102,7 +102,7 @@ brews:
     # Can be used to specify alternate downloads for devel or head releases.
     # Default is empty.
     custom_block: |
-      head "https://github.com/some/package.git"
+      head "https://github.com/hbyio/cappa.git"
       ...
 
 #    # Packages your package depends on.
