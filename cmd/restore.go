@@ -22,6 +22,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/jackc/pgx/v4"
+	"github.com/spf13/viper"
 	"io/ioutil"
 	"log"
 	"os"
@@ -119,7 +120,7 @@ func PickFileIn(dir string) string {
 	}
 	backupSelected := ""
 	prompt := &survey.Select{
-		Message: "Select local backup file:",
+		Message: fmt.Sprintf("Select local backup file in %s/:", viper.GetString("from-dir")),
 		Options: Selector,
 	}
 	survey.AskOne(prompt, &backupSelected, nil)

@@ -17,17 +17,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-var config Config
-
 const cliName string = "cappa"
 
-var configFileName = fmt.Sprintf(".%s.toml", strings.ToLower(cliName))
-
 var (
-	version = "v0.6-beta1"
-	commit  = "none"
-	date    = "unknown"
-	builtBy = "unknown"
+	version        = "v0.6-beta1"
+	commit         = "none"
+	date           = "unknown"
+	builtBy        = "unknown"
+	configFileName = fmt.Sprintf(".%s.toml", strings.ToLower(cliName))
+	config         Config
 )
 
 type Config struct {
@@ -56,18 +54,17 @@ Heavily (98%) inspired by fastmonkeys/stellar
 		if !verbose {
 			log.SetOutput(ioutil.Discard)
 		}
-		log.Println("Using config file:", viper.ConfigFileUsed())
-		log.Printf("Config values : %#v", config)
 		// Enable line numbers in logging
 		log.SetFlags(log.LstdFlags | log.Lshortfile)
-		//log.SetFlags(0)
 
-		fmt.Printf("%v", cmd.Name())
+		// Some commands does not need a correct config file to be present, return early if we are running
+		// excluded commands
 		runningCmd := cmd.Name()
 		if runningCmd == "version" || runningCmd == "help" {
 			return nil
 		}
 
+		// Find & load config file
 		if err := viper.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 				fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) not found in current directory", configFileName)))
@@ -78,10 +75,13 @@ Heavily (98%) inspired by fastmonkeys/stellar
 				os.Exit(0)
 			}
 		}
+		// Unmarshal config into Config struct
 		err = viper.Unmarshal(&config)
 		if err != nil {
 			log.Fatalf("error unmarshall %s", err)
 		}
+		log.Println("Using config file:", viper.ConfigFileUsed())
+		log.Printf("Config values : %#v", config)
 
 		// If cli database does not exists, create
 		conn := createConnection(config, "")
@@ -95,11 +95,6 @@ Heavily (98%) inspired by fastmonkeys/stellar
 
 		return nil
 	},
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//Run: func(cmd *cobra.Command, args []string) {
-	//	fmt.Print("root called")
-	//},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -114,21 +109,13 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "What's wrong ? Speak to me")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	// Lookup order (first one found is used)
-	// FLAG > ENV > CONFIG
 	viper.SetConfigName(".cappa") // name of config file (without extension)
 	viper.AddConfigPath(".")      // optionally look for config in the working directory
 	viper.SetDefault("from-dir", fmt.Sprintf(".%s", cliName))
-
 }
 
 // create connection with postgres db
