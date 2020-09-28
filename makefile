@@ -14,3 +14,6 @@ release:
 
 releasefake:
 	goreleaser release --skip-publish
+
+test:
+	go test ./cmd/... -v

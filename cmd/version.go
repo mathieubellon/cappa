@@ -12,7 +12,11 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of Cappa",
 	Long:  `All software has versions. This is Cappa's`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Cappa %s\ncommit %s, built at %s by %s\n", version, commit, date, builtBy)
+		// Working with OutOrStdout/OutOrStderr allows us to unit test our command easier
+		out := cmd.OutOrStdout()
+
+		// Print the final resolved value from binding cobra flags and viper config
+		fmt.Fprintf(out, "Cappa %s\ncommit %s, built at %s by %s\n", version, commit, date, builtBy)
 	},
 }
 
