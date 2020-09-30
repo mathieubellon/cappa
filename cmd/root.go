@@ -2,17 +2,17 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/AlecAivazis/survey/v2"
-	"github.com/AlecAivazis/survey/v2/terminal"
-	"github.com/BurntSushi/toml"
+
 	"github.com/jackc/pgx/v4"
-	"github.com/ttacon/chalk"
+
 	"io/ioutil"
 	"log"
-	"os"
+
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -29,12 +29,12 @@ var (
 )
 
 type Config struct {
-	Username string `mapstructure:"username" survey:"username"`
-	Password string `mapstructure:"password" survey:"password"`
-	Host     string `mapstructure:"host" survey:"host"`
-	Port     string `mapstructure:"port" survey:"port"`
-	Database string `mapstructure:"database" survey:"database"`
-	Project  string `mapstructure:"project" survey:"project"`
+	Username string `mapstructure:"username" survey:"username" validate:"required"`
+	Password string `mapstructure:"password" survey:"password" validate:"required"`
+	Host     string `mapstructure:"host" survey:"host" validate:"required"`
+	Port     string `mapstructure:"port" survey:"port" validate:"required"`
+	Database string `mapstructure:"database" survey:"database" validate:"required"`
+	Project  string `mapstructure:"project" survey:"project" validate:"required"`
 }
 
 // rootCmd represents the base command when called without any subcommands
@@ -45,6 +45,7 @@ var rootCmd = &cobra.Command{
 Useful when you have git branches containing migrations
 Heavily (98%) inspired by fastmonkeys/stellar
 `,
+	SilenceUsage: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
 		verbose, err := cmd.Flags().GetBool("verbose")
@@ -60,26 +61,30 @@ Heavily (98%) inspired by fastmonkeys/stellar
 		// Some commands does not need a correct config file to be present, return early if we are running
 		// excluded commands
 		runningCmd := cmd.Name()
-		if runningCmd == "version" || runningCmd == "help" {
+		if runningCmd == "version" || runningCmd == "help" || runningCmd == "init" {
 			return nil
 		}
 
 		// Find & load config file
 		if err := viper.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-				fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) not found in current directory", configFileName)))
-				fmt.Println(chalk.Yellow.Color(fmt.Sprint("I will create one after asking you a few questions")))
-				writeConfigFile(configFileName)
+				return errors.New(fmt.Sprintf("%s\nRun 'cappa init'", err.(viper.ConfigFileNotFoundError)))
 			} else {
-				log.Printf("Config file was found but another error was produced : %s", err)
-				os.Exit(0)
+				return errors.New(fmt.Sprintf("Config file was found but another error was produced : %s", err))
 			}
 		}
-		// Unmarshal config into Config struct
+
 		err = viper.Unmarshal(&config)
 		if err != nil {
-			log.Fatalf("error unmarshall %s", err)
+			log.Printf("error unmarshall %s", err)
 		}
+
+		valid, errors := isConfigValid(&config)
+		if !valid {
+			fmt.Fprintf(cmd.OutOrStdout(), "Some values are missing or are incorrect in your config file (run 'cappa init')\n")
+			return errors
+		}
+
 		log.Println("Using config file:", viper.ConfigFileUsed())
 		log.Printf("Config values : %#v", config)
 
@@ -97,12 +102,24 @@ Heavily (98%) inspired by fastmonkeys/stellar
 	},
 }
 
+func isConfigValid(config *Config) (bool, error) {
+	validate := validator.New()
+	err := validate.Struct(config)
+	if err != nil {
+		errorsList := []string{}
+		for _, err := range err.(validator.ValidationErrors) {
+			errorsList = append(errorsList, fmt.Sprintf("\n\"%s\" %s", err.Field(), err.Tag()))
+		}
+		return false, errors.New(fmt.Sprintf("\n%s", strings.Join(errorsList, "")))
+	}
+	return true, nil
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+
 	}
 }
 
@@ -137,84 +154,6 @@ func createConnection(config Config, database string) *pgx.Conn {
 	}
 	log.Printf("Successfully connected to %s", database)
 	return conn
-}
-
-func writeConfigFile(filename string) {
-
-	err := runWizard(&config)
-	if err != nil {
-		log.Fatalf("Error during wizard : %s", err)
-	}
-
-	f, err := os.Create(filename)
-	if err != nil {
-		// failed to create/open the file
-		log.Fatal(err)
-	}
-	if err := toml.NewEncoder(f).Encode(config); err != nil {
-		// failed to encode
-		log.Fatal(err)
-	}
-
-	fmt.Println(chalk.Green.Color(fmt.Sprintf("Config file (%s) created, good to go", configFileName)))
-
-	defer func() {
-		if err := f.Close(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-}
-
-func runWizard(config *Config) error {
-	// Get parent dir name as project name
-	currWorkDirPath, _ := os.Getwd()
-	breakPath := strings.Split(currWorkDirPath, "/")
-	maybeDirName := breakPath[len(breakPath)-1]
-
-	// Wizard questions
-	var qs = []*survey.Question{
-		{
-			Name:     "username",
-			Prompt:   &survey.Input{Message: "Postgres user ?"},
-			Validate: survey.Required,
-		},
-		{
-			Name:     "password",
-			Prompt:   &survey.Password{Message: "Postgres password ?"},
-			Validate: survey.Required,
-		},
-		{
-			Name:     "host",
-			Prompt:   &survey.Input{Message: "Postgres server host ?", Default: "127.0.0.1"},
-			Validate: survey.Required,
-		},
-		{
-			Name:     "port",
-			Prompt:   &survey.Input{Message: "Postgres server port ?", Default: "5432"},
-			Validate: survey.Required,
-		},
-		{
-			Name:     "database",
-			Prompt:   &survey.Input{Message: "Your working database name"},
-			Validate: survey.Required,
-		},
-		{
-			Name:     "project",
-			Prompt:   &survey.Input{Message: "This project name", Default: maybeDirName},
-			Validate: survey.Required,
-		},
-	}
-
-	// perform the questions
-	err := survey.Ask(qs, config)
-	if err == terminal.InterruptErr {
-		fmt.Println("User terminated prompt, no config file created")
-		os.Exit(0)
-	} else if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // This function create the database for tracking snapshots
