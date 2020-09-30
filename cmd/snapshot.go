@@ -18,7 +18,7 @@ import (
 var snapshotCmd = &cobra.Command{
 	Use:   "snapshot",
 	Short: "Snapshot database",
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var snapshotName string
 		snapUuid := shortuuid.New()
 		toDatabase := fmt.Sprintf("%s_%s", cliName, strings.ToLower(snapUuid))
@@ -30,7 +30,7 @@ var snapshotCmd = &cobra.Command{
 		err := survey.AskOne(prompt, &snapshotName, survey.WithValidator(survey.Required))
 		if err == terminal.InterruptErr {
 			fmt.Println("User terminated prompt")
-			os.Exit(0)
+			return nil
 		} else if err != nil {
 			log.Fatal(err)
 		}
@@ -60,7 +60,7 @@ var snapshotCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Snapshot created from %s to %s\n", config.Database, snapshotName)
-
+		return nil
 	},
 }
 
