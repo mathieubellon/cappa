@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -22,9 +24,19 @@ var database = "postgres"
 var err error
 
 func TestMain(m *testing.M) {
-	setup()
+	// Go test has path relative to package instead of root package
+	// So we alter this behavior here
+	_, filename, _, _ := runtime.Caller(0)
+	dir := path.Join(path.Dir(filename), "..")
+	err := os.Chdir(dir)
+	if err != nil {
+		panic(err)
+	}
+
+	// Tear up tests
+	//setup()
 	code := m.Run()
-	teardown()
+	//teardown()
 	os.Exit(code)
 }
 
@@ -63,7 +75,19 @@ func NewRootCmd() *cobra.Command {
 	return rootCmd
 }
 
-func Test_ExecuteCommand(t *testing.T) {
+type fakeConfig struct {
+	Config
+}
+
+func (f *fakeConfig) create() error {
+	_, err := os.Create(".cappa.toml")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func Test_ExecuteRootCommand(t *testing.T) {
 	cmd := NewRootCmd()
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)

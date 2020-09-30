@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/AlecAivazis/survey/v2/terminal"
@@ -45,6 +46,7 @@ var rootCmd = &cobra.Command{
 Useful when you have git branches containing migrations
 Heavily (98%) inspired by fastmonkeys/stellar
 `,
+	SilenceUsage: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
 		verbose, err := cmd.Flags().GetBool("verbose")
@@ -67,18 +69,19 @@ Heavily (98%) inspired by fastmonkeys/stellar
 		// Find & load config file
 		if err := viper.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-				fmt.Println(chalk.Yellow.Color(fmt.Sprintf("Config file (%s) not found in current directory", configFileName)))
-				fmt.Println(chalk.Yellow.Color(fmt.Sprint("I will create one after asking you a few questions")))
-				writeConfigFile(configFileName)
+				return err.(viper.ConfigFileNotFoundError)
 			} else {
-				log.Printf("Config file was found but another error was produced : %s", err)
-				os.Exit(0)
+				return errors.New(fmt.Sprintf("Config file was found but another error was produced : %s", err))
 			}
+		}
+		emptyConfig := Config{}
+		if config == emptyConfig {
+			return errors.New(fmt.Sprintf("Config file exists but is empty"))
 		}
 		// Unmarshal config into Config struct
 		err = viper.Unmarshal(&config)
 		if err != nil {
-			log.Fatalf("error unmarshall %s", err)
+			log.Printf("error unmarshall %s", err)
 		}
 		log.Println("Using config file:", viper.ConfigFileUsed())
 		log.Printf("Config values : %#v", config)
@@ -101,8 +104,7 @@ Heavily (98%) inspired by fastmonkeys/stellar
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+
 	}
 }
 
