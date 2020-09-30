@@ -22,37 +22,52 @@ var pool *dockertest.Pool
 var resource *dockertest.Resource
 var database = "postgres"
 var err error
+var testDir string
+
+var testConfig = Config{
+	Username: "postgres",
+	Password: "secret",
+	Host:     "localhost",
+	Port:     "5432",
+	Database: "devproject",
+	Project:  "testproject",
+}
 
 func TestMain(m *testing.M) {
 	// Go test has path relative to package instead of root package
 	// So we alter this behavior here
 	_, filename, _, _ := runtime.Caller(0)
-	dir := path.Join(path.Dir(filename), "..")
-	err := os.Chdir(dir)
+	rootdir := path.Join(path.Dir(filename), "..")
+	err := os.Chdir(rootdir)
 	if err != nil {
 		panic(err)
 	}
+	// We create a test dir like a real project situation
+	testDir, err = ioutil.TempDir(".", "testdir")
+	if err != nil {
+		panic(err)
+	}
+	os.Chdir(testDir)
 
-	// Tear up tests
-	//setup()
+	//setupDockerDb()
 	code := m.Run()
 	//teardown()
 	os.Exit(code)
 }
 
-func setup() {
+func setupDockerDb() {
 	pool, err = dockertest.NewPool("")
 	if err != nil {
 		log.Fatalf("Could not connect to docker: %s", err)
 	}
-	resource, err = pool.Run("postgres", "9.6", []string{"POSTGRES_PASSWORD=secret", "POSTGRES_DB=" + database})
+	resource, err = pool.Run("postgres", "9.6", []string{"POSTGRES_PASSWORD=" + testConfig.Password, "POSTGRES_DB=" + database})
 	if err != nil {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
 	if err = pool.Retry(func() error {
 		var err error
-		db, err = sql.Open("postgres", fmt.Sprintf("postgres://postgres:secret@localhost:%s/%s?sslmode=disable", resource.GetPort("5432/tcp"), database))
+		db, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", testConfig.Username, testConfig.Password, testConfig.Host, resource.GetPort("5432/tcp"), database))
 		if err != nil {
 			return err
 		}
@@ -68,6 +83,10 @@ func teardown() {
 	if err := pool.Purge(resource); err != nil {
 		log.Fatalf("Could not purge resource: %s", err)
 	}
+	err = os.RemoveAll(testDir)
+	if err != nil {
+		log.Fatalf("error removing testDir")
+	}
 	fmt.Printf("\033[1;36m%s\033[0m", "> Teardown completed\n")
 }
 
@@ -81,6 +100,13 @@ type fakeConfig struct {
 
 func (f *fakeConfig) create() error {
 	_, err := os.Create(".cappa.toml")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (f *fakeConfig) remove() error {
+	err := os.Remove(".cappa.toml")
 	if err != nil {
 		return err
 	}

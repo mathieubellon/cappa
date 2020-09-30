@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -30,12 +31,12 @@ var (
 )
 
 type Config struct {
-	Username string `mapstructure:"username" survey:"username"`
-	Password string `mapstructure:"password" survey:"password"`
-	Host     string `mapstructure:"host" survey:"host"`
-	Port     string `mapstructure:"port" survey:"port"`
-	Database string `mapstructure:"database" survey:"database"`
-	Project  string `mapstructure:"project" survey:"project"`
+	Username string `mapstructure:"username" survey:"username" validate:"required"`
+	Password string `mapstructure:"password" survey:"password" validate:"required"`
+	Host     string `mapstructure:"host" survey:"host" validate:"required"`
+	Port     string `mapstructure:"port" survey:"port" validate:"required"`
+	Database string `mapstructure:"database" survey:"database" validate:"required"`
+	Project  string `mapstructure:"project" survey:"project" validate:"required"`
 }
 
 // rootCmd represents the base command when called without any subcommands
@@ -62,27 +63,30 @@ Heavily (98%) inspired by fastmonkeys/stellar
 		// Some commands does not need a correct config file to be present, return early if we are running
 		// excluded commands
 		runningCmd := cmd.Name()
-		if runningCmd == "version" || runningCmd == "help" {
+		if runningCmd == "version" || runningCmd == "help" || runningCmd == "init" {
 			return nil
 		}
 
 		// Find & load config file
 		if err := viper.ReadInConfig(); err != nil {
 			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-				return err.(viper.ConfigFileNotFoundError)
+				return errors.New(fmt.Sprintf("%s\nRun 'cappa init'", err.(viper.ConfigFileNotFoundError)))
 			} else {
 				return errors.New(fmt.Sprintf("Config file was found but another error was produced : %s", err))
 			}
 		}
-		emptyConfig := Config{}
-		if config == emptyConfig {
-			return errors.New(fmt.Sprintf("Config file exists but is empty"))
-		}
-		// Unmarshal config into Config struct
+
 		err = viper.Unmarshal(&config)
 		if err != nil {
 			log.Printf("error unmarshall %s", err)
 		}
+
+		valid, errors := isConfigValid(&config)
+		if !valid {
+			fmt.Fprintf(cmd.OutOrStdout(), "Some values are missing or are incorrect in your config file (run 'cappa init')\n")
+			return errors
+		}
+
 		log.Println("Using config file:", viper.ConfigFileUsed())
 		log.Printf("Config values : %#v", config)
 
@@ -98,6 +102,19 @@ Heavily (98%) inspired by fastmonkeys/stellar
 
 		return nil
 	},
+}
+
+func isConfigValid(config *Config) (bool, error) {
+	validate := validator.New()
+	err := validate.Struct(config)
+	if err != nil {
+		errorsList := []string{}
+		for _, err := range err.(validator.ValidationErrors) {
+			errorsList = append(errorsList, fmt.Sprintf("\n\"%s\" %s", err.Field(), err.Tag()))
+		}
+		return false, errors.New(fmt.Sprintf("\n%s", strings.Join(errorsList, "")))
+	}
+	return true, nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
