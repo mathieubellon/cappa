@@ -17,6 +17,13 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/AlecAivazis/survey/v2/terminal"
+	"github.com/BurntSushi/toml"
+	"github.com/ttacon/chalk"
+	"log"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -49,4 +56,83 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// initCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+
+func writeConfigFile(filename string) {
+
+	err := runWizard(&config)
+	if err != nil {
+		log.Fatalf("Error during wizard : %s", err)
+	}
+
+	f, err := os.Create(filename)
+	if err != nil {
+		// failed to create/open the file
+		log.Fatal(err)
+	}
+	if err := toml.NewEncoder(f).Encode(config); err != nil {
+		// failed to encode
+		log.Fatal(err)
+	}
+
+	fmt.Println(chalk.Green.Color(fmt.Sprintf("Config file (%s) created, good to go", configFileName)))
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+}
+
+func runWizard(config *Config) error {
+	// Get parent dir name as project name
+	currWorkDirPath, _ := os.Getwd()
+	breakPath := strings.Split(currWorkDirPath, "/")
+	maybeDirName := breakPath[len(breakPath)-1]
+
+	// Wizard questions
+	var qs = []*survey.Question{
+		{
+			Name:     "username",
+			Prompt:   &survey.Input{Message: "Postgres user ?"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "password",
+			Prompt:   &survey.Password{Message: "Postgres password ?"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "host",
+			Prompt:   &survey.Input{Message: "Postgres server host ?", Default: "127.0.0.1"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "port",
+			Prompt:   &survey.Input{Message: "Postgres server port ?", Default: "5432"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "database",
+			Prompt:   &survey.Input{Message: "Your working database name"},
+			Validate: survey.Required,
+		},
+		{
+			Name:     "project",
+			Prompt:   &survey.Input{Message: "This project name", Default: maybeDirName},
+			Validate: survey.Required,
+		},
+	}
+
+	// perform the questions
+	err := survey.Ask(qs, config)
+	if err == terminal.InterruptErr {
+		fmt.Println("User terminated prompt, no config file created")
+		os.Exit(0)
+	} else if err != nil {
+		return err
+	}
+
+	return nil
 }

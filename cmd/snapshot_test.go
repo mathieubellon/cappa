@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func Test_ExecuteSnapshotNoConfig(t *testing.T) {
+func Test_ExecuteSnapshotWithNoConfigFile(t *testing.T) {
 	cmd := NewRootCmd()
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
@@ -18,20 +18,20 @@ func Test_ExecuteSnapshotNoConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	subString := "Not Found in"
+	subString := `Error: Config File ".cappa" Not Found in`
 	if !strings.Contains(string(out), subString) {
 		t.Fatalf("expected output to contain \"%s\" in \"%s\"", subString, string(out))
 	}
 }
 
-func Test_ExecuteSnapshotEmptyConfig(t *testing.T) {
+func Test_ExecuteSnapshotWithInvalidConfig(t *testing.T) {
 	cmd := NewRootCmd()
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
 	cmd.SetErr(b)
 	cmd.SetArgs([]string{"snapshot"})
 	fakeconf := fakeConfig{}
-	_ = fakeconf.create()
+	fakeconf.create()
 	cmd.Execute()
 	out, err := ioutil.ReadAll(b)
 	if err != nil {
@@ -51,7 +51,7 @@ func Test_ExecuteSnapshot(t *testing.T) {
 	cmd.SetErr(b)
 	cmd.SetArgs([]string{"snapshot"})
 	fakeconf := fakeConfig{}
-	_ = fakeconf.create()
+	fakeconf.create()
 	cmd.Execute()
 	out, err := ioutil.ReadAll(b)
 	if err != nil {

@@ -34,6 +34,7 @@ var testConfig = Config{
 }
 
 func TestMain(m *testing.M) {
+
 	// Go test has path relative to package instead of root package
 	// So we alter this behavior here
 	_, filename, _, _ := runtime.Caller(0)
@@ -42,6 +43,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
+
 	// We create a test dir like a real project situation
 	testDir, err = ioutil.TempDir(".", "testdir")
 	if err != nil {
@@ -49,9 +51,15 @@ func TestMain(m *testing.M) {
 	}
 	os.Chdir(testDir)
 
-	//setupDockerDb()
+	// Setup docker with database
+	setupDockerDb()
+
+	// Run all tests
 	code := m.Run()
-	//teardown()
+
+	// Teardown
+	teardown()
+
 	os.Exit(code)
 }
 
@@ -78,6 +86,19 @@ func setupDockerDb() {
 	fmt.Printf("\033[1;36m%s\033[0m", "> Setup completed\n")
 }
 
+func resetDatabases(){
+	deleteNonTemplateDat := `select 'drop database "'||datname||'";' from pg_database where datistemplate=false AND datname!='postgres';`
+	row := db.QueryRow(deleteNonTemplateDat)
+	switch err := row.Scan(); err {
+	case sql.ErrNoRows:
+		log.Println("No rows were returned!")
+	case nil:
+		log.Println("success")
+	default:
+		panic(err)
+	}
+}
+
 func teardown() {
 	// You can't defer this because os.Exit doesn't care for defer
 	if err := pool.Purge(resource); err != nil {
@@ -85,7 +106,7 @@ func teardown() {
 	}
 	err = os.RemoveAll(testDir)
 	if err != nil {
-		log.Fatalf("error removing testDir")
+		fmt.Printf("error removing testDir %s",err)
 	}
 	fmt.Printf("\033[1;36m%s\033[0m", "> Teardown completed\n")
 }
@@ -98,13 +119,21 @@ type fakeConfig struct {
 	Config
 }
 
-func (f *fakeConfig) create() error {
+func (f *fakeConfig) create() {
 	_, err := os.Create(".cappa.toml")
 	if err != nil {
-		return err
+		log.Fatal("Error creating empty fake config file")
 	}
-	return nil
 }
+
+func (f *fakeConfig) createReal() {
+	_, err := os.Create(".cappa.toml")
+	if err != nil {
+		log.Fatal("Error creating empty fake config file")
+	}
+}
+
+
 func (f *fakeConfig) remove() error {
 	err := os.Remove(".cappa.toml")
 	if err != nil {
