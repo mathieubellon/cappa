@@ -1,0 +1,15 @@
+FROM postgres:9.6-alpine
+
+RUN apk add --no-cache go
+# Configure Go
+ENV GOROOT /usr/lib/go
+ENV GOPATH /go
+ENV PATH /go/bin:$PATH
+RUN mkdir -p ${GOPATH}/src ${GOPATH}/bin
+
+RUN mkdir /app
+WORKDIR /app
+
+COPY . .
+
+ENTRYPOINT ["go", "test", "-v", "./...", "-coverprofile", "cover.out"]

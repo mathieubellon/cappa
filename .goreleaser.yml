@@ -49,7 +49,7 @@ brews:
     # Gitea is not supported yet, but the support coming
     tap:
       owner: hbyio
-      name: cappa-tap
+      name: cappa
       # Optionally a token can be provided, if it differs from the token provided to GoReleaser
       # token: "{{ .Env.GITHUB_TOKEN }}"
 
@@ -80,7 +80,7 @@ brews:
 
     # Caveats for the user of your binary.
     # Default is empty.
-    caveats: "How to use cappa binary"
+    # caveats: "How to use cappa binary"
 
     # Your app's homepage.
     # Default is empty.
@@ -101,9 +101,9 @@ brews:
     # Custom block for brew.
     # Can be used to specify alternate downloads for devel or head releases.
     # Default is empty.
-    custom_block: |
-      head "https://github.com/hbyio/cappa.git"
-      ...
+#    custom_block: |
+#      head "https://github.com/hbyio/cappa.git"
+#      ...
 
 #    # Packages your package depends on.
 #    dependencies:

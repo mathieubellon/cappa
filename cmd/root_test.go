@@ -13,13 +13,10 @@ import (
 	"testing"
 
 	_ "github.com/lib/pq"
-	"github.com/ory/dockertest/v3"
 	"github.com/spf13/cobra"
 )
 
 var db *sql.DB
-var pool *dockertest.Pool
-var resource *dockertest.Resource
 var database = "postgres"
 var err error
 var testDir string
@@ -27,7 +24,7 @@ var testDir string
 var testConfig = Config{
 	Username: "postgres",
 	Password: "secret",
-	Host:     "localhost",
+	Host:     "127.0.0.1",
 	Port:     "5432",
 	Database: "devproject",
 	Project:  "testproject",
@@ -52,7 +49,7 @@ func TestMain(m *testing.M) {
 	os.Chdir(testDir)
 
 	// Setup docker with database
-	setupDockerDb()
+	setup()
 
 	// Run all tests
 	code := m.Run()
@@ -63,51 +60,69 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func setupDockerDb() {
-	pool, err = dockertest.NewPool("")
+func setup() {
+	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", testConfig.Username, testConfig.Password, testConfig.Host, "5432", "postgres")
+	fmt.Printf("connexion url %s", url)
+	db, err = sql.Open("postgres", url)
 	if err != nil {
-		log.Fatalf("Could not connect to docker: %s", err)
+		log.Fatalf("Cannot open connection to database : %s\n", err)
 	}
-	resource, err = pool.Run("postgres", "9.6", []string{"POSTGRES_PASSWORD=" + testConfig.Password, "POSTGRES_DB=" + database})
+	err = db.Ping()
 	if err != nil {
-		log.Fatalf("Could not start resource: %s", err)
-	}
-
-	if err = pool.Retry(func() error {
-		var err error
-		db, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", testConfig.Username, testConfig.Password, testConfig.Host, resource.GetPort("5432/tcp"), database))
-		if err != nil {
-			return err
-		}
-		return db.Ping()
-	}); err != nil {
-		log.Fatalf("Could not connect to docker: %s", err)
+		log.Fatalf("Cannot ping the database : %s\n", err)
 	}
 	fmt.Printf("\033[1;36m%s\033[0m", "> Setup completed\n")
 }
 
-func resetDatabases(){
-	deleteNonTemplateDat := `select 'drop database "'||datname||'";' from pg_database where datistemplate=false AND datname!='postgres';`
-	row := db.QueryRow(deleteNonTemplateDat)
-	switch err := row.Scan(); err {
-	case sql.ErrNoRows:
-		log.Println("No rows were returned!")
-	case nil:
-		log.Println("success")
-	default:
-		panic(err)
+// GetDeletionQueries select all databases to delete following a pattern and return
+// a list of sql statements ready to be executed
+func GetDeletionQueries() ([]string, error) {
+	var deletionQueries []string
+	var deleteNonTemplateDat = `select 'drop database "'||datname||'";' from pg_database where datistemplate=false AND datname!='postgres';`
+
+	rows, err := db.Query(deleteNonTemplateDat)
+	if err != nil {
+		return deletionQueries, err
 	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var deleteQuery string
+		err := rows.Scan(&deleteQuery)
+		if err != nil {
+			return deletionQueries, err
+		}
+		deletionQueries = append(deletionQueries, deleteQuery)
+	}
+	fmt.Printf("rows %s", deletionQueries)
+	return deletionQueries, nil
 }
 
 func teardown() {
-	// You can't defer this because os.Exit doesn't care for defer
-	if err := pool.Purge(resource); err != nil {
-		log.Fatalf("Could not purge resource: %s", err)
+	//
+	queries, err := GetDeletionQueries()
+	if err != nil {
+		log.Printf("Error while getting all delete statements : %s", err)
 	}
+	// Execute each deletion query
+	for _, query := range queries {
+		row := db.QueryRow(query)
+		switch err := row.Scan(); err {
+		case sql.ErrNoRows:
+			fmt.Println("No rows were returned!")
+		case nil:
+			fmt.Printf("Execute OK %s", query)
+		default:
+			panic(err)
+		}
+	}
+
 	err = os.RemoveAll(testDir)
 	if err != nil {
-		fmt.Printf("error removing testDir %s",err)
+		fmt.Printf("Cannot delete dir : %s", err)
 	}
+	fmt.Printf("Delet this dir %s", testDir)
+
 	fmt.Printf("\033[1;36m%s\033[0m", "> Teardown completed\n")
 }
 
@@ -132,7 +147,6 @@ func (f *fakeConfig) createReal() {
 		log.Fatal("Error creating empty fake config file")
 	}
 }
-
 
 func (f *fakeConfig) remove() error {
 	err := os.Remove(".cappa.toml")
