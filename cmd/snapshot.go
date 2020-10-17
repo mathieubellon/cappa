@@ -18,40 +18,45 @@ import (
 var snapshotCmd = &cobra.Command{
 	Use:   "snapshot",
 	Short: "Snapshot database",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var snapshotName string
 		snapUuid := shortuuid.New()
 		toDatabase := fmt.Sprintf("%s_%s", cliName, strings.ToLower(snapUuid))
 
-		// Ask user for snapshot name
-		prompt := &survey.Input{
-			Message: "Name of snapshot",
-		}
-		err := survey.AskOne(prompt, &snapshotName, survey.WithValidator(survey.Required))
-		if err == terminal.InterruptErr {
-			fmt.Println("User terminated prompt")
-			return nil
-		} else if err != nil {
-			log.Fatal(err)
+		if len(args) == 1 {
+			snapshotName = args[0]
+		} else {
+			// Ask user for snapshot name
+			prompt := &survey.Input{
+				Message: "Name of snapshot",
+			}
+			err := survey.AskOne(prompt, &snapshotName, survey.WithValidator(survey.Required))
+			if err == terminal.InterruptErr {
+				fmt.Println("User terminated prompt")
+				return nil
+			} else if err != nil {
+				log.Fatal(err)
+			}
 		}
 
 		// Create raw db connexion for copy operation
-		rawConn := createConnection(config, "")
+		rawConn := createConnection(cliDbUrl)
 		defer rawConn.Close(context.Background())
 
 		// terminate connexion of source DB before copy
-		err = TerminateDatabaseConnections(rawConn, config.Database)
+		err := TerminateDatabaseConnections(rawConn, config.Database)
 		if err != nil {
 			log.Fatalf("Impossible to terminate DB connexion : %s", err)
 		}
-
+		fmt.Sprintln("Copying tracked database, please wait ...")
 		// Copy source DB to snapshot DB
-		copy_database(rawConn, config.Database, toDatabase)
+		copy_database(rawConn, getProjectName(), toDatabase)
 
 		// After (and only after) snapshot DB is created we create tracked db informations
-		trackerConn := createConnection(config, cliName)
+		trackerConn := createConnection(cliDbUrl)
 		defer trackerConn.Close(context.Background())
-		insertSql := fmt.Sprintf("INSERT INTO snapshots (hash, name, project) VALUES ('%s', '%s', '%s');", strings.ToLower(snapUuid), snapshotName, config.Project)
+		insertSql := fmt.Sprintf("INSERT INTO snapshots (hash, name, project) VALUES ('%s', '%s', '%s');", strings.ToLower(snapUuid), snapshotName, getProjectName())
 		log.Print(insertSql)
 
 		_, err = trackerConn.Exec(context.Background(), insertSql)
@@ -59,7 +64,7 @@ var snapshotCmd = &cobra.Command{
 			log.Fatalf("Error inserting snapshot infos : %s", err)
 		}
 
-		fmt.Printf("Snapshot created from %s to %s\n", config.Database, snapshotName)
+		fmt.Printf("Snapshot of %s successgully created, name is : %s\n", getProjectName(), snapshotName)
 		return nil
 	},
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/mitchellh/go-homedir"
+	"net/url"
 
 	"github.com/jackc/pgx/v4"
 
@@ -19,6 +21,10 @@ import (
 
 const cliName string = "cappa"
 
+var trackedDbUrl string
+var defaultDbUrl string
+var cliDbUrl string
+
 var (
 	version        = "v0.6-beta1"
 	commit         = "none"
@@ -26,6 +32,7 @@ var (
 	builtBy        = "unknown"
 	configFileName = fmt.Sprintf(".%s.toml", strings.ToLower(cliName))
 	config         Config
+	cfgFile        string
 )
 
 type Config struct {
@@ -63,33 +70,43 @@ Heavily (98%) inspired by fastmonkeys/stellar
 		runningCmd := cmd.Name()
 		if runningCmd == "version" || runningCmd == "help" || runningCmd == "init" {
 			return nil
+		} else {
+			initConfig()
 		}
 
-		// Find & load config file
-		if err := viper.ReadInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-				return errors.New(fmt.Sprintf("%s\nRun 'cappa init'", err.(viper.ConfigFileNotFoundError)))
-			} else {
-				return errors.New(fmt.Sprintf("Config file was found but another error was produced : %s", err))
-			}
+		if viper.GetString("database_url") == "" {
+			fmt.Print("Error : 'database_url' not set\nPlease provide a connexion url ('postgres://user:password@localhost:5432/dbname')\nIt can be DATABASE_URL in environment variable or database_url in config file\n")
 		}
 
-		err = viper.Unmarshal(&config)
-		if err != nil {
-			log.Printf("error unmarshall %s", err)
+		// Connection URL to the database we want to track
+		trackedDbUrl = viper.GetString("database_url")
+		log.Printf("Tracked database connection string : %s", trackedDbUrl)
+
+		// Connection URL to the default database (we assume 'postgres') for DELETE/COPY operations of the tracked database
+		// Use database_url to get a connection string to default database
+		t, _ := url.Parse(trackedDbUrl)
+		d := &url.URL{
+			Scheme: t.Scheme,
+			User:   t.User,
+			Host:   t.Host,
+			Path:   "postgres",
 		}
+		defaultDbUrl = d.String()
+		log.Printf("Default database connection string : %s", defaultDbUrl)
 
-		valid, errors := isConfigValid(&config)
-		if !valid {
-			fmt.Fprintf(cmd.OutOrStdout(), "Some values are missing or are incorrect in your config file (run 'cappa init')\n")
-			return errors
+		// Connection URL to the cli database
+		// Use database_url to get a connection string to cli database
+		c := &url.URL{
+			Scheme: t.Scheme,
+			User:   t.User,
+			Host:   t.Host,
+			Path:   cliName,
 		}
+		cliDbUrl = c.String()
+		log.Printf("CLI database connection string : %s", cliDbUrl)
 
-		log.Println("Using config file:", viper.ConfigFileUsed())
-		log.Printf("Config values : %#v", config)
-
-		// If cli database does not exists, create
-		conn := createConnection(config, "")
+		//If cli database does not exists, create
+		conn := createConnection(defaultDbUrl)
 		defer func() {
 			err := conn.Close(context.Background())
 			if err != nil {
@@ -124,35 +141,61 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize()
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cappa.toml)")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "What's wrong ? Speak to me")
 }
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	viper.SetConfigName(".cappa") // name of config file (without extension)
-	viper.AddConfigPath(".")      // optionally look for config in the working directory
-	viper.SetDefault("from-dir", fmt.Sprintf(".%s", cliName))
+	if cfgFile != "" {
+		// Use config file from the flag.
+		viper.SetConfigFile(cfgFile)
+	} else {
+		// Find home directory.
+		home, err := homedir.Dir()
+		if err != nil {
+			log.Printf("Unable to locate home directory : %s", err)
+		}
+
+		// Search config in home directory with name ".cobra" (without extension).
+		viper.AddConfigPath(home)
+		viper.AddConfigPath(".")
+		viper.SetConfigName(".cappa")
+	}
+
+	//viper.BindEnv("database_url")
+	viper.AutomaticEnv()
+
+	// Find & load config file
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			log.Printf("%s\nRun 'cappa init'", err.(viper.ConfigFileNotFoundError))
+		} else {
+			log.Printf("Config file was found but another error was produced : %s", err)
+		}
+	}
+
 }
 
 // create connection with postgres db
-func createConnection(config Config, database string) *pgx.Conn {
+func createConnection(connUrl string) *pgx.Conn {
 	//Connect to a specific database for dedicated operations or, by default, to postgres database for create/drop operations
-	if database == "" {
-		database = "postgres"
-	}
+	//if database == "" {
+	//	database = "postgres"
+	//}
+
 	// Open the connection
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", config.Host, config.Port, config.Username, config.Password, database)
-	conn, err := pgx.Connect(context.Background(), dsn)
+	conn, err := pgx.Connect(context.Background(), connUrl)
 	if err != nil {
-		log.Fatalf("Unable to connect to database %s : %v\n", database, err)
+		log.Fatalf("Unable to connect to database with %v : %v\n", connUrl, err)
 	}
 	// check the connection
 	err = conn.Ping(context.Background())
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Successfully connected to %s", database)
+	log.Printf("Successfully connected to %s", connUrl)
 	return conn
 }
 
@@ -162,7 +205,7 @@ func createTrackerDb(conn *pgx.Conn) {
 	if !DatabaseExists(conn, cliName) {
 		CreateDatabase(conn, cliName)
 
-		trackerConn := createConnection(config, cliName)
+		trackerConn := createConnection(cliDbUrl)
 		defer func() {
 			err := trackerConn.Close(context.Background())
 			if err != nil {

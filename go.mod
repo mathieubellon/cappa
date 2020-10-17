@@ -20,6 +20,7 @@ require (
 	github.com/magiconair/properties v1.8.3 // indirect
 	github.com/manifoldco/promptui v0.7.0
 	github.com/mattn/go-runewidth v0.0.9 // indirect
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/mapstructure v1.3.3 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/opencontainers/go-digest v1.0.0 // indirect
@@ -37,6 +38,7 @@ require (
 	github.com/spf13/viper v1.7.1
 	github.com/ttacon/chalk v0.0.0-20160626202418-22c06c80ed31
 	github.com/xeonx/timeago v1.0.0-rc4
+	github.com/xo/dburl v0.0.0-20200910011426-652e0d5720a3
 	golang.org/x/net v0.0.0-20200927032502-5d4f70055728 // indirect
 	golang.org/x/sys v0.0.0-20200926100807-9d91bd62050c // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect

@@ -5,7 +5,7 @@ build:
 	goreleaser --snapshot --skip-publish --rm-dist
 
 test:
-	docker run --rm  -e POSTGRES_PASSWORD=secret cappa:latest
+	docker run --rm -i -e POSTGRES_PASSWORD=secret cappa:latest
 	#go test ./cmd/... -v --volume=${PWD}:/app -w /app
 
 image:

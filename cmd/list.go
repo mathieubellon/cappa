@@ -25,8 +25,10 @@ import (
 	"github.com/ttacon/chalk"
 	"github.com/xeonx/timeago"
 	"log"
+	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -37,17 +39,20 @@ type Snapshot struct {
 	CreatedAt time.Time
 }
 
+func (s *Snapshot) TimeAgo() string {
+	return timeago.English.Format(s.CreatedAt)
+}
+
 // listCmd represents the list command
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all your snapshots",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("List command called")
 
-		trackerConn := createConnection(config, cliName)
-		defer trackerConn.Close(context.Background())
+		cliDbConn := createConnection(cliDbUrl)
+		defer cliDbConn.Close(context.Background())
 
-		list, err := listSnapshots(trackerConn)
+		list, err := listSnapshots(cliDbConn)
 		if err != nil {
 			log.Printf("Could not list snapshots : %s", err)
 		}
@@ -91,9 +96,16 @@ func init() {
 }
 
 func getProjectName() string {
-	project := viper.GetString("project")
+
+	databaseURL := viper.GetString("database_url")
+	u, err := url.Parse(databaseURL)
+	if err != nil {
+		log.Printf("error parsing database_url : %s", err)
+	}
+	project := strings.Split(u.Path, "/")[1]
+	log.Printf("projectName sets to : %s\n", project)
 	if project == "" {
-		log.Fatal("Error trying to get project name from config (did you set project value?)")
+		fmt.Println("Error trying to get project name from config (did you set project value?)")
 	}
 	return project
 }
@@ -101,9 +113,9 @@ func getProjectName() string {
 func listSnapshots(conn *pgx.Conn) ([]Snapshot, error) {
 
 	selectQuery := fmt.Sprintf("SELECT id, hash, name, created_at FROM snapshots WHERE project = '%s';", getProjectName())
+	log.Println(selectQuery)
 
 	rows, err := conn.Query(context.Background(), selectQuery)
-	log.Println(selectQuery)
 	if err != nil {
 		log.Printf("Select Query Error : %s", err)
 	}

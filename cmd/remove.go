@@ -32,19 +32,19 @@ var removeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("remove called")
 
-		trackerConn := createConnection(config, cliName)
-		defer trackerConn.Close(context.Background())
+		cliDbConn := createConnection(cliDbUrl)
+		defer cliDbConn.Close(context.Background())
 
-		snapshots, err := listSnapshots(trackerConn)
+		snapshots, err := listSnapshots(cliDbConn)
 		if err != nil {
 			log.Fatalf("Error while listing snasphot for removal : %s", err)
 		}
-
+		//timeago.English.Format(snap.CreatedAt)
 		templates := &promptui.SelectTemplates{
 			Label:    "{{ . | red }}",
-			Active:   "\U0001F336 {{ .Name | cyan }} ({{ .Hash | yellow }})",
-			Inactive: "  {{ .Name | cyan }} ({{ .Hash | yellow }})",
-			Selected: "\U0001F336 {{ .Name | red | cyan }}",
+			Active:   "[x] {{ .Name | cyan }} ({{ .CreatedAt | yellow }})",
+			Inactive: "[ ] {{ .Name | cyan }} ({{ .CreatedAt | yellow }})",
+			Selected: "[x] {{ .Name | red | cyan }} ({{ .Hash | red | cyan }})",
 			Details: `
 --------- Snapshot ----------
 {{ "Name:" | faint }}	{{ .Name }}
@@ -75,21 +75,20 @@ var removeCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Printf("You choose number %d: %s %v\n", i+1, snapshots[i].Name, snapshots[i])
+		fmt.Printf("Removing snapshot %s\nPlease wait ...\n", snapshots[i].Name)
 
 		snap := snapshots[i]
 
-		rawConn := createConnection(config, cliName)
-		defer rawConn.Close(context.Background())
+		defaultDbConn := createConnection(defaultDbUrl)
+		defer defaultDbConn.Close(context.Background())
 
 		databaseToDrop := fmt.Sprintf("%s_%s", cliName, snap.Hash)
-
-		TerminateDatabaseConnections(rawConn, databaseToDrop)
-		DropDatabase(rawConn, databaseToDrop)
+		TerminateDatabaseConnections(defaultDbConn, databaseToDrop)
+		DropDatabase(defaultDbConn, databaseToDrop)
 
 		deleteSql := fmt.Sprintf("DELETE FROM snapshots WHERE id=%d;", snap.Id)
 		log.Print(deleteSql)
-		_, err = trackerConn.Exec(context.Background(), deleteSql)
+		_, err = cliDbConn.Exec(context.Background(), deleteSql)
 		if err != nil {
 			log.Fatalf("Error deleting snapshot infos : %s", err)
 		}

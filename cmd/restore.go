@@ -25,6 +25,8 @@ import (
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"log"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,35 +55,48 @@ var restoreDumpCmd = &cobra.Command{
 	Short: "Restore from dump file",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		restoreFromDir(directory)
+		err := restoreFromDir(directory)
+		if err != nil {
+			fmt.Printf("Error while restoring from dir : %s", err)
+		}
 	},
 }
 
-func restoreFromDir(dir string) {
-	conn := createConnection(config, "")
-	defer conn.Close(context.Background())
+func restoreFromDir(dir string) error {
 
-	if DatabaseExists(conn, config.Database) {
-		TerminateDatabaseConnections(conn, config.Database)
-		DropDatabase(conn, config.Database)
+	_, err := os.Stat(dir)
+	if err != nil {
+		log.Printf("Error while retriving os.Stat infos : %s", err)
+		return fmt.Errorf("Directory %s does not exists", dir)
 	}
 
-	CreateDatabase(conn, config.Database)
+	defaultDbConn := createConnection(defaultDbUrl)
+	defer defaultDbConn.Close(context.Background())
 
-	backupSelected := PickFileIn(dir)
+	backupSelected, err := PickFileIn(dir)
+	if err != nil {
+		return err
+	}
 
 	dumpPath := filepath.Join(dir, backupSelected)
 
-	log.Printf("Selected backup to restore : %v", dumpPath)
+	fmt.Printf("Start restore from dump file %v\nPlease wait...", dumpPath)
 
-	restoreDatabase(dumpPath, config, config.Database)
+	if DatabaseExists(defaultDbConn, getProjectName()) {
+		TerminateDatabaseConnections(defaultDbConn, getProjectName())
+		DropDatabase(defaultDbConn, getProjectName())
+	}
+	CreateDatabase(defaultDbConn, getProjectName())
+	restoreDatabase(dumpPath, trackedDbUrl)
+
+	return nil
 }
 
 func DatabaseExists(conn *pgx.Conn, database string) bool {
 	var exists bool
 
 	query := fmt.Sprintf("select exists(SELECT datname FROM pg_catalog.pg_database WHERE lower(datname) = lower('%s'));", database)
-	log.Printf("execute this query %s", query)
+	log.Print(query)
 
 	err := conn.QueryRow(context.Background(), query).Scan(&exists)
 	if err != nil {
@@ -102,7 +117,7 @@ func ensurepath(command string) string {
 	return command
 }
 
-func PickFileIn(dir string) string {
+func PickFileIn(dir string) (string, error) {
 	var Selector []string
 
 	completeList, err := ioutil.ReadDir(dir)
@@ -112,6 +127,9 @@ func PickFileIn(dir string) string {
 	}
 	if err != nil {
 		log.Fatal(err)
+	}
+	if len(completeList) == 0 {
+		return "", fmt.Errorf("Directory exists but is empty")
 	}
 
 	for _, localbackup := range completeList {
@@ -127,7 +145,7 @@ func PickFileIn(dir string) string {
 	if backupSelected == "" {
 		log.Fatal("No backup selected")
 	}
-	return backupSelected
+	return backupSelected, nil
 }
 
 // TerminateDatabaseConnections force cuts all connections to database before drop or create operations
@@ -148,18 +166,23 @@ func TerminateDatabaseConnections(conn *pgx.Conn, database string) error {
 	return nil
 }
 
-func restoreDatabase(dumpPath string, config Config, database string) {
+func restoreDatabase(dumpPath string, connUrl string) {
 
 	// Check command is available
 	ensurepath("pg_restore")
+	c, err := url.Parse(connUrl)
+	if err != nil {
+		log.Printf("Unable to parse conn url : %s", err)
+	}
+	host, port, _ := net.SplitHostPort(c.Host)
 
 	log.Printf("Start restore dump %v into database %v\nPlease wait ...\n", dumpPath, config.Database)
-	args := fmt.Sprintf("--host=%s --port=%s --username=%s --verbose --clean --disable-triggers --no-acl --no-owner -d %s %s", config.Host, config.Port, config.Username, config.Database, dumpPath)
+	args := fmt.Sprintf("--host=%s --port=%s --username=%s --verbose --clean --disable-triggers --no-acl --no-owner -d %s %s", host, port, c.User.Username(), getProjectName(), dumpPath)
 	cmd := exec.Command("pg_restore", strings.Split(args, " ")...)
 
 	stderr, _ := cmd.StderrPipe()
 
-	err := cmd.Start()
+	err = cmd.Start()
 	if err != nil {
 		log.Fatalf("Could not start command : %s", err)
 	}
@@ -201,10 +224,10 @@ func CreateDatabase(conn *pgx.Conn, database string) {
 
 func restoreFromSnapshot() {
 	log.Println("revert called")
-	trackerConn := createConnection(config, cliName)
-	defer trackerConn.Close(context.Background())
+	cliDbConn := createConnection(cliDbUrl)
+	defer cliDbConn.Close(context.Background())
 
-	list, err := listSnapshots(trackerConn)
+	list, err := listSnapshots(cliDbConn)
 	if err != nil {
 		log.Fatalf("Error while listing snasphot for removal : %s", err)
 	}
@@ -229,18 +252,20 @@ func restoreFromSnapshot() {
 
 	for _, snap := range list {
 		if snap.Name == snapshotSelected {
-			rawConn := createConnection(config, cliName)
-			defer rawConn.Close(context.Background())
+			defaultDbConn := createConnection(defaultDbUrl)
+			defer defaultDbConn.Close(context.Background())
 
 			fromDatabase := fmt.Sprintf("%s_%s", cliName, snap.Hash)
-			toDatabase := config.Database
+			toDatabase := getProjectName()
 
-			TerminateDatabaseConnections(rawConn, fromDatabase)
-			TerminateDatabaseConnections(rawConn, toDatabase)
+			TerminateDatabaseConnections(defaultDbConn, fromDatabase)
+			TerminateDatabaseConnections(defaultDbConn, toDatabase)
 
-			DropDatabase(rawConn, config.Database)
+			fmt.Printf("Restoring from snapshot %s, please wait ..\n", snapshotSelected)
+			DropDatabase(defaultDbConn, toDatabase)
 
-			copy_database(rawConn, fromDatabase, toDatabase)
+			copy_database(defaultDbConn, fromDatabase, toDatabase)
+			fmt.Printf("Restoring from snapshot %s successfull\n", snapshotSelected)
 		}
 	}
 }
