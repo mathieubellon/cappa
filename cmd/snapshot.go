@@ -17,7 +17,7 @@ import (
 // snapshotCmd represents the snapshot command
 var snapshotCmd = &cobra.Command{
 	Use:   "snapshot",
-	Short: "Snapshot database",
+	Short: "Create snapshot of development database",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var snapshotName string
@@ -49,7 +49,7 @@ var snapshotCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("Impossible to terminate DB connexion : %s", err)
 		}
-		fmt.Sprintln("Copying tracked database, please wait ...")
+		fmt.Println("Copying tracked database, please wait ...")
 		// Copy source DB to snapshot DB
 		copy_database(rawConn, getProjectName(), toDatabase)
 

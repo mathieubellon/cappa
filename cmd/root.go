@@ -26,7 +26,7 @@ var defaultDbUrl string
 var cliDbUrl string
 
 var (
-	version        = "v0.6-beta1"
+	version        = "v0.6"
 	commit         = "none"
 	date           = "unknown"
 	builtBy        = "unknown"
@@ -46,12 +46,9 @@ type Config struct {
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   `cappa`,
-	Short: `It is like Git, but for development databases`,
-	Long: `Cappa allows you to take fast snapshots / restore of your development database.
-Useful when you have git branches containing migrations
-Heavily (98%) inspired by fastmonkeys/stellar
-`,
+	Use:          `cappa`,
+	Short:        `It is like Git, but for development databases`,
+	Long:         `Cappa allows you to take fast snapshots / restore of your development database.`,
 	SilenceUsage: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 

@@ -42,7 +42,7 @@ var anonymisationQueries = []string{
 // executeCmd represents the execute command
 var executeCmd = &cobra.Command{
 	Use:   "execute",
-	Short: "Execute sql from file (default '.cappa.sql')",
+	Short: "Execute sql from file (default '.cappa/execute.sql')",
 	Long: `This can be useful if you need to alter data in your working database after you restored
 a dump file from production
 
