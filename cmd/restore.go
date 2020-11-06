@@ -42,7 +42,7 @@ var directory string
 var restoreCmd = &cobra.Command{
 	Use:     "restore",
 	Aliases: []string{"r"},
-	Short:   "Restore from dump file",
+	Short:   "Restore from backup file",
 	Run: func(cmd *cobra.Command, args []string) {
 		err := restoreFromDir(directory)
 		if err != nil {

@@ -93,7 +93,7 @@ If you are using PostreSQL, make sure you have a database named 'postgres'.
 Todo
 -------
 
-- [ ] UX (wait animations, warnings, ..)
+- [ ] UX (wait animations, warnings, ..) 
 - [ ] Tests
 - [ ] Mysql
 
