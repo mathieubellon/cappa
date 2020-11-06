@@ -28,7 +28,7 @@ import (
 // snapbackCmd represents the snapback command
 var snapbackCmd = &cobra.Command{
 	Use:   "back",
-	Short: "Reinstall a snapshot in lead database",
+	Short: "Reinstall a snapshot in development database",
 	Run: func(cmd *cobra.Command, args []string) {
 		restoreFromSnapshot()
 	},
