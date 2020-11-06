@@ -7,27 +7,29 @@ Warning : not stable yet + PostgreSQL only (at the moment).
 
 Heavily inspired by [fastmonkeys/stellar](https://github.com/fastmonkeys/stellar)
 
-```
+```shell
 Cappa allows you to take fast snapshots / restore of your development database.
 
 Usage:
   cappa [command]
 
 Available Commands:
+  back        Reinstall a snapshot in development database
+  delete      Delete snapshot
   execute     Execute sql from file (default '.cappa/execute.sql')
-  grab        A brief description of your command
+  grab        Grab backup file (.dump) from s3 bucket
   help        Help about any command
-  list        List all your snapshots
-  remove      Remove snapshot
-  restore     Restore from snapshot
-  snapshot    Create snapshot of development database
+  list        List your snapshots
+  restore     Restore from backup file
+  snap        Create snapshot of development database
   version     Print the version number of Cappa
 
 Flags:
-      --config string   config file (default is $HOME/.cappa.toml)
+      --config string   config file (default is .cappa.toml)
   -h, --help            help for cappa
   -v, --verbose         What's wrong ? Speak to me
 
+Use "cappa [command] --help" for more information about a command.
 ```
 
 How it works
