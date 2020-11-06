@@ -27,7 +27,7 @@ import (
 
 // removeCmd represents the remove command
 var removeCmd = &cobra.Command{
-	Use:   "snapdel",
+	Use:   "delete",
 	Short: "Delete snapshot",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("remove called")

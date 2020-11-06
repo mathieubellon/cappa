@@ -45,7 +45,8 @@ func (s *Snapshot) TimeAgo() string {
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
-	Use:   "snaplist",
+	Use: "list" +
+		"",
 	Short: "List your snapshots",
 	Run: func(cmd *cobra.Command, args []string) {
 
