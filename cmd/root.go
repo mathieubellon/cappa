@@ -71,49 +71,55 @@ var rootCmd = &cobra.Command{
 			initConfig()
 		}
 
-		if viper.GetString("database_url") == "" {
-			fmt.Print("Error : 'database_url' not set\nPlease provide a connexion url ('postgres://user:password@localhost:5432/dbname')\nIt can be DATABASE_URL in environment variable or database_url in config file\n")
+		if runningCmd != "grab" {
+			SetDatabaseConnections()
 		}
-
-		// Connection URL to the database we want to track
-		trackedDbUrl = viper.GetString("database_url")
-		log.Printf("Tracked database connection string : %s", trackedDbUrl)
-
-		// Connection URL to the default database (we assume 'postgres') for DELETE/COPY operations of the tracked database
-		// Use database_url to get a connection string to default database
-		t, _ := url.Parse(trackedDbUrl)
-		d := &url.URL{
-			Scheme: t.Scheme,
-			User:   t.User,
-			Host:   t.Host,
-			Path:   "postgres",
-		}
-		defaultDbUrl = d.String()
-		log.Printf("Default database connection string : %s", defaultDbUrl)
-
-		// Connection URL to the cli database
-		// Use database_url to get a connection string to cli database
-		c := &url.URL{
-			Scheme: t.Scheme,
-			User:   t.User,
-			Host:   t.Host,
-			Path:   cliName,
-		}
-		cliDbUrl = c.String()
-		log.Printf("CLI database connection string : %s", cliDbUrl)
-
-		//If cli database does not exists, create
-		conn := createConnection(defaultDbUrl)
-		defer func() {
-			err := conn.Close(context.Background())
-			if err != nil {
-				log.Printf("Error while closing db connection : %s", err)
-			}
-		}()
-		createTrackerDb(conn)
 
 		return nil
 	},
+}
+
+func SetDatabaseConnections() {
+	if viper.GetString("database_url") == "" {
+		fmt.Print("Error : 'database_url' not set\nPlease provide a connexion url ('postgres://user:password@localhost:5432/dbname')\nIt can be DATABASE_URL in environment variable or database_url in config file\n")
+	}
+
+	// Connection URL to the database we want to track
+	trackedDbUrl = viper.GetString("database_url")
+	log.Printf("Tracked database connection string : %s", trackedDbUrl)
+
+	// Connection URL to the default database (we assume 'postgres') for DELETE/COPY operations of the tracked database
+	// Use database_url to get a connection string to default database
+	t, _ := url.Parse(trackedDbUrl)
+	d := &url.URL{
+		Scheme: t.Scheme,
+		User:   t.User,
+		Host:   t.Host,
+		Path:   "postgres",
+	}
+	defaultDbUrl = d.String()
+	log.Printf("Default database connection string : %s", defaultDbUrl)
+
+	// Connection URL to the cli database
+	// Use database_url to get a connection string to cli database
+	c := &url.URL{
+		Scheme: t.Scheme,
+		User:   t.User,
+		Host:   t.Host,
+		Path:   cliName,
+	}
+	cliDbUrl = c.String()
+	log.Printf("CLI database connection string : %s", cliDbUrl)
+
+	//If cli database does not exists, create
+	conn := createConnection(defaultDbUrl)
+	defer func() {
+		err := conn.Close(context.Background())
+		if err != nil {
+			log.Printf("Error while closing db connection : %s", err)
+		}
+	}()
+	createTrackerDb(conn)
 }
 
 func isConfigValid(config *Config) (bool, error) {
@@ -139,7 +145,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize()
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cappa.toml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .cappa.toml)")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "What's wrong ? Speak to me")
 }
 

@@ -72,10 +72,16 @@ var grabCmd = &cobra.Command{
 		sess := getAwsSession(&awsconfig)
 
 		if awsconfig.Bucket == "" {
-			return fmt.Errorf("You must provide a --bucket flag")
+			return fmt.Errorf("You must provide a bucket value")
+		}
+		if awsconfig.Region == "" {
+			return fmt.Errorf("You must provide a region value")
 		}
 		// Grab a list of filenames from source s3
-		backupList := readBucket(awsconfig.Bucket, awsconfig.Prefix, sess)
+		backupList, err := readBucket(awsconfig.Bucket, awsconfig.Prefix, sess)
+		if err != nil {
+			log.Printf("Error listing files in bucket : %s", err)
+		}
 
 		// Ask user to select one file in list
 		filekey, filename, filesize := selectBackupIn(backupList)
@@ -100,7 +106,7 @@ func init() {
 	grabCmd.PersistentFlags().StringP("aws_secret_access_key", "s", "", "Aws secret access key")
 	grabCmd.PersistentFlags().String("dest", ".cappa", "Local directory where to download files")
 	grabCmd.PersistentFlags().String("bucket", "", "Aws s3 bucket")
-	grabCmd.PersistentFlags().String("region", "eu-west-3", "Aws s3 region")
+	grabCmd.PersistentFlags().String("region", "", "Aws s3 region")
 	grabCmd.PersistentFlags().String("prefix", "", "Prefix, within bucket, where to look for backup files")
 
 	viper.BindPFlag("aws_access_key_id", grabCmd.PersistentFlags().Lookup("aws_access_key_id"))
@@ -113,7 +119,7 @@ func init() {
 }
 
 // Read bucket content an return a list of s3 Keys
-func readBucket(bucket string, prefix string, sess *session.Session) []S3Key {
+func readBucket(bucket string, prefix string, sess *session.Session) ([]S3Key, error) {
 
 	// Create S3 service client
 	svc := s3.New(sess)
@@ -125,8 +131,7 @@ func readBucket(bucket string, prefix string, sess *session.Session) []S3Key {
 
 	resp, listError := svc.ListObjects(params)
 	if listError != nil {
-		log.Printf("Error while listing files in Bucket : %s", listError)
-		os.Exit(1)
+		return nil, listError
 	}
 
 	var keyList []S3Key
@@ -137,7 +142,7 @@ func readBucket(bucket string, prefix string, sess *session.Session) []S3Key {
 	// Sort slice of keys by last modified date first
 	sort.Slice(keyList, func(i, j int) bool { return keyList[i].updated.After(keyList[j].updated) })
 
-	return keyList
+	return keyList, nil
 }
 
 func getAwsSession(aco *AwsConfig) *session.Session {
@@ -218,7 +223,7 @@ func (pw *progressWriter) WriteAt(p []byte, off int64) (int, error) {
 // Download downloads a file to the local filesystem using s3downloader
 func Download(bucket string, sess *session.Session, filekey string, filename string, filesize int64, destination string) error {
 
-	temp, err := ioutil.TempFile(destination, "s3mini-")
+	temp, err := ioutil.TempFile(destination, "cappa-")
 	if err != nil {
 		panic(err)
 	}
@@ -239,12 +244,7 @@ func Download(bucket string, sess *session.Session, filekey string, filename str
 
 	if _, err := downloader.Download(writer, params); err != nil {
 		bar.Set64(bar.Total)
-		log.Printf("Download failed! Deleting tempfile: %s", tempfileName)
-		err := os.Remove(tempfileName)
-		if err != nil {
-			log.Fatal("Could not remove temp file")
-		}
-		panic(err)
+		return err
 	}
 
 	bar.FinishPrint(fmt.Sprintf("Downloaded %s to %s", filename, destination))
@@ -252,6 +252,13 @@ func Download(bucket string, sess *session.Session, filekey string, filename str
 	if err := temp.Close(); err != nil {
 		panic(err)
 	}
+
+	defer func() {
+		err := os.Remove(tempfileName)
+		if err != nil {
+			log.Printf("Could not remove temp file")
+		}
+	}()
 
 	if err := os.Rename(temp.Name(), fmt.Sprintf("%s/%s", destination, filename)); err != nil {
 		panic(err)
