@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/jackc/pgx/v4"
 	"github.com/spf13/viper"
 	"io/ioutil"
@@ -43,17 +42,7 @@ var directory string
 var restoreCmd = &cobra.Command{
 	Use:     "restore",
 	Aliases: []string{"r"},
-	Short:   "Restore from snapshot",
-	Long:    ``,
-	Run: func(cmd *cobra.Command, args []string) {
-		restoreFromSnapshot()
-	},
-}
-
-var restoreDumpCmd = &cobra.Command{
-	Use:   "dump",
-	Short: "Restore from dump file",
-	Long:  ``,
+	Short:   "Restore from dump file",
 	Run: func(cmd *cobra.Command, args []string) {
 		err := restoreFromDir(directory)
 		if err != nil {
@@ -222,56 +211,7 @@ func CreateDatabase(conn *pgx.Conn, database string) {
 	}
 }
 
-func restoreFromSnapshot() {
-	log.Println("revert called")
-	cliDbConn := createConnection(cliDbUrl)
-	defer cliDbConn.Close(context.Background())
-
-	list, err := listSnapshots(cliDbConn)
-	if err != nil {
-		log.Fatalf("Error while listing snasphot for removal : %s", err)
-	}
-
-	var options []string
-	for _, snap := range list {
-		options = append(options, snap.Name)
-	}
-
-	var snapshotSelected string
-	prompt := &survey.Select{
-		Message: "Select snapshot to revert to primary database :",
-		Options: options,
-	}
-	err = survey.AskOne(prompt, &snapshotSelected, survey.WithValidator(survey.Required))
-	if err == terminal.InterruptErr {
-		fmt.Println("User terminated prompt")
-		os.Exit(0)
-	} else if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, snap := range list {
-		if snap.Name == snapshotSelected {
-			defaultDbConn := createConnection(defaultDbUrl)
-			defer defaultDbConn.Close(context.Background())
-
-			fromDatabase := fmt.Sprintf("%s_%s", cliName, snap.Hash)
-			toDatabase := getProjectName()
-
-			TerminateDatabaseConnections(defaultDbConn, fromDatabase)
-			TerminateDatabaseConnections(defaultDbConn, toDatabase)
-
-			fmt.Printf("Restoring from snapshot %s, please wait ..\n", snapshotSelected)
-			DropDatabase(defaultDbConn, toDatabase)
-
-			copy_database(defaultDbConn, fromDatabase, toDatabase)
-			fmt.Printf("Restoring from snapshot %s successfull\n", snapshotSelected)
-		}
-	}
-}
-
 func init() {
 	rootCmd.AddCommand(restoreCmd)
-	restoreCmd.AddCommand(restoreDumpCmd)
-	restoreCmd.PersistentFlags().StringVar(&directory, "from-dir", ".cappa", "Select dump file to restore in directory")
+	restoreCmd.PersistentFlags().StringVar(&directory, "dir", ".cappa", "Directory to look dumps files for")
 }

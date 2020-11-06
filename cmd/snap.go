@@ -16,8 +16,8 @@ import (
 
 // snapshotCmd represents the snapshot command
 var snapshotCmd = &cobra.Command{
-	Use:   "snapshot",
-	Short: "Create snapshot of development database",
+	Use:   "snap",
+	Short: "Create snapshot of lead database",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var snapshotName string

@@ -45,8 +45,8 @@ func (s *Snapshot) TimeAgo() string {
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all your snapshots",
+	Use:   "snaplist",
+	Short: "List your snapshots",
 	Run: func(cmd *cobra.Command, args []string) {
 
 		cliDbConn := createConnection(cliDbUrl)
